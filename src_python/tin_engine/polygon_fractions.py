@@ -33,16 +33,11 @@ FEWEST = 8
 #: Below this share of its triangle, the uncovered rest is taken as the
 #: rounding of the cut, not area (a chosen threshold).
 REST = 1e-9
-#: Where the two halves' areas miss the piece's by more than this share, the
-#: halves are cut again with `shapely.intersection`: GEOS's rectangle clip
-#: loses area when a hole touches its ring at a point on the cut line.
-AREA = 1e-9
 
 
 def subdivide(polygon: BaseGeometry, most: int = 64) -> list[BaseGeometry]:
     """`polygon` (or each part of a multipolygon) halved along the longer side
-    of its bounding box with `shapely.clip_by_rect` (`shapely.intersection`
-    where the clip loses area) until each piece has at
+    of its bounding box with `shapely.intersection` until each piece has at
     most `most` coordinates, holes and closing points counted. The pieces tile
     the polygon; one at or under `most` comes back as itself. `most` below 8
     is a `ValueError`: halving cannot always get under it."""
@@ -60,9 +55,9 @@ def subdivide(polygon: BaseGeometry, most: int = 64) -> list[BaseGeometry]:
             rects = [(x0, y0, (x0 + x1) / 2, y1), ((x0 + x1) / 2, y0, x1, y1)]
         else:
             rects = [(x0, y0, x1, (y0 + y1) / 2), (x0, (y0 + y1) / 2, x1, y1)]
-        halves = [shapely.clip_by_rect(part, *r) for r in rects]
-        if abs(sum(h.area for h in halves) - part.area) > AREA * part.area:
-            halves = [shapely.intersection(part, shapely.box(*r)) for r in rects]
+        # Never `shapely.clip_by_rect`: where a hole touches the outer ring it
+        # can lose area or join the two into one invalid, self-touching ring.
+        halves = [shapely.intersection(part, shapely.box(*r)) for r in rects]
         for half in halves:
             parts = shapely.get_parts(half)
             todo += [(p, depth + 1) for p in parts if isinstance(p, Polygon) and not p.is_empty]
