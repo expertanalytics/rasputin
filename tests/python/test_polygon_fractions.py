@@ -366,6 +366,22 @@ class TestSubdivide:
         assert all(p.is_valid for p in pieces)
         assert abs(area_sum(pieces) / holed.area - 1.0) <= AREA
 
+    def test_a_plain_square_is_halved_by_the_rectangle_clip_alone(
+        self, pf: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The general intersection is the slow redo for a half the clip gets
+        wrong: a square with 1,000 vertices on its edges never needs it, and
+        its pieces are the clip's alone."""
+        square = shapely.segmentize(box(0.0, 0.0, 1.0, 1.0), 0.004)
+
+        def refuse(*_: object) -> None:
+            raise AssertionError("intersection called on a plain square")
+
+        monkeypatch.setattr(pf.shapely, "intersection", refuse)
+        pieces = list(pf.subdivide(square, most=64))
+        assert len(pieces) > 1 and max(coordinate_counts(pieces)) <= 64
+        assert abs(area_sum(pieces) - 1.0) <= AREA
+
     def test_holes_count_and_are_kept(self, pf: ModuleType) -> None:
         """A square of 5 coordinates around a 1,000-gon hole: 1,006 in all, so
         it is cut, and the pieces' areas are the square's less the hole's."""
