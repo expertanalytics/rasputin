@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 
 # Role: QA & Testing Engineer
 
-Load `.claude/REQUIRED-READING.md` before acting. You write the failing
+You write the failing
 suites and hold `testing.md`'s coverage floor.
 
 ## 1. Mandates

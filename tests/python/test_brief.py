@@ -418,9 +418,9 @@ def test_6_perf_alone_says_nothing_runs_beside_it(repo: Path, home: Path) -> Non
     assert concurrency(output) == ("Concurrency: you run alone; nothing runs beside a timing run.")
 
 
-# Ola's ruling of 2026-10-27 (perf.md §2): an untimed @perf run (model
-# results, not timings), marked by --untimed, may run beside exactly one
-# writer; a timing run (no flag) still runs alone, read-only agents included.
+# Ola's rulings of 2026-10-27 and 2026-11-02 (perf.md §2): an untimed @perf
+# run, marked by --untimed, counts as one writer within the two-writer limit;
+# a timing run (no flag) still runs alone, read-only agents included.
 
 
 def test_6_untimed_perf_runs_beside_one_writer(
@@ -438,6 +438,8 @@ def test_6_perf_beside_a_writer_without_untimed_is_refused(
 ) -> None:
     refused(repo, home, *run_as("perf", trees["B"], f"developer:{trees['A']}"),
             says="nothing runs beside a timing run (@perf)")  # fmt: skip
+    refused(repo, home, *run_as("perf", trees["B"], f"reviewer:{trees['C']}"),
+            says="brief its untimed stages with --untimed")  # fmt: skip
 
 
 def test_6_untimed_perf_beside_two_writers_is_refused(
@@ -445,7 +447,7 @@ def test_6_untimed_perf_beside_two_writers_is_refused(
 ) -> None:
     args = run_as("perf", trees["C"], f"tester:{trees['A']}", f"developer:{trees['B']}",
                   extra=("--untimed",))  # fmt: skip
-    refused(repo, home, *args, says="an untimed @perf run goes beside one writer at most")
+    refused(repo, home, *args, says="at most two writers run at once")
 
 
 # An untimed @perf run may also have read-only agents beside it; rule 4 (a
@@ -502,7 +504,7 @@ def test_6_untimed_perf_beside_two_writers_and_a_reader_is_refused(
     d = add_worktree(repo, tmp_path.resolve() / "D", "wt-d")
     args = run_as("perf", trees["C"], f"tester:{trees['A']}", f"developer:{trees['B']}",
                   f"reviewer:{d}", extra=("--untimed",))  # fmt: skip
-    refused(repo, home, *args, says="an untimed @perf run goes beside one writer at most")
+    refused(repo, home, *args, says="at most two writers run at once")
 
 
 def test_6_rule_2_at_most_two_writers(repo: Path, home: Path, trees: dict[str, Path]) -> None:
