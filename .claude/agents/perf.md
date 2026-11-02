@@ -22,9 +22,9 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
   `/sys/class/power_supply`); compare battery with battery, AC with AC, and
   `--hardening on` or `off` with its own kind.
 * **Rebuilt:** with `--no-build`, run `python3 tools/rebuild_core.py` first.
-* **Alone:** timed stages (wall time a gated or reported figure) run first,
-  beside nothing, read-only agents included, then hand back; the untimed
-  rest (checks, completion runs, probes, scores) is briefed again with
+* **Heavy, detached:** a timed acceptance, scaling or lsm run goes out
+  detached (`detach.py start`), beside nothing; hand back and re-attach with
+  `detach.py status`, reading the run dir. The untimed rest runs
   `--untimed`.
 * **Median of repeats;** record machine, threads, DEM, domain, tolerance and
   quality (worst angle, max vertex degree, tolerance and Delaunay checks).

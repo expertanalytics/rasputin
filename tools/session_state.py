@@ -259,6 +259,30 @@ def roadmap_next(text: str, n: int = 3) -> list[str]:
     return rows[:n]
 
 
+def detached_lines(root: Path) -> list[str]:
+    """One line per detached run under `root`, its state and name (h40 §5).
+
+    Read-only: imports `tools/detach.py` and reports each `*.detached.json`
+    manifest's state (done / running / failed / unknown). A malformed manifest
+    or an import fault costs one line, never a crash -- the recap's standing
+    fault policy.
+    """
+    try:
+        import detach
+
+        states = detach.status(root)
+        lines = [f"{state} {name}" for name, state in states.items()]
+        seen = set(states)
+        bad = sum(
+            1 for p in root.glob(f"*{detach._MARKER}") if p.name[: -len(detach._MARKER)] not in seen
+        )
+        if bad:
+            lines.append(f"(could not read {bad} manifest(s))")
+        return lines
+    except Exception as error:
+        return [f"(detached runs unavailable: {type(error).__name__}: {str(error)[:100]})"]
+
+
 def unattended_header(mode: harness_mode.Mode) -> str | None:
     """The line above the recap while the flag is not off (h3 U1 §3.8)."""
     if mode.state == "broken":
