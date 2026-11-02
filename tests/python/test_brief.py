@@ -13,6 +13,7 @@ its `main(argv)`, so `WRITES` can be changed for the run; see the handback.
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -153,7 +154,8 @@ def test_1_the_worktree_is_printed_absolute_and_resolved(
 
 
 def test_1_two_runs_in_the_same_second_give_the_same_block(repo: Path, home: Path) -> None:
-    args = args_for("tester", repo)
+    """A read-only persona's: a writer's brief makes its note file (3.6), so the next is -2."""
+    args = args_for("reviewer", repo)
     for _ in range(5):
         before = datetime.now().strftime("%H%M%S")
         first, second = ok(repo, home, *args), ok(repo, home, *args)
@@ -357,7 +359,7 @@ def test_6_beside_one_writer_names_it_and_allows_a_build(
 ) -> None:
     line = concurrency(ok(repo, home, *run_as("developer", trees["B"], f"tester:{trees['A']}")))
     assert f"@tester (writer, in {trees['A'].resolve()})" in line
-    assert "At most two writers run at once" in line
+    assert "At most three writers run at once" in line
     assert "You may build C++ in this run." in line
 
 
@@ -389,7 +391,7 @@ def test_6_a_read_only_persona_runs_beside_two_writers(
         assert f"@reviewer (read-only, in {trees['C'].resolve()})" in line
     else:
         assert f"@developer (writer, in {trees['B'].resolve()})" in line
-    assert "read-only agents do not count toward the two" in line
+    assert "read-only agents do not count toward the three" in line
 
 
 def test_6_two_read_only_entries_beside_two_writers(
@@ -442,12 +444,13 @@ def test_6_perf_beside_a_writer_without_untimed_is_refused(
             says="brief its untimed stages with --untimed")  # fmt: skip
 
 
-def test_6_untimed_perf_beside_two_writers_is_refused(
-    repo: Path, home: Path, trees: dict[str, Path]
+def test_6_untimed_perf_beside_three_writers_is_refused(
+    repo: Path, home: Path, trees: dict[str, Path], tmp_path: Path
 ) -> None:
+    d = add_worktree(repo, tmp_path.resolve() / "D", "wt-d")
     args = run_as("perf", trees["C"], f"tester:{trees['A']}", f"developer:{trees['B']}",
-                  extra=("--untimed",))  # fmt: skip
-    refused(repo, home, *args, says="at most two writers run at once")
+                  f"architect:{d}", extra=("--untimed",))  # fmt: skip
+    refused(repo, home, *args, says="at most three writers run at once")
 
 
 # An untimed @perf run may also have read-only agents beside it; rule 4 (a
@@ -498,18 +501,28 @@ def test_6_untimed_perf_reader_sharing_perfs_worktree_is_refused(
     refused(repo, home, *args, says=f"@reviewer is read-only and shares {shared} with a writer")
 
 
-def test_6_untimed_perf_beside_two_writers_and_a_reader_is_refused(
+def test_6_untimed_perf_beside_three_writers_and_a_reader_is_refused(
     repo: Path, home: Path, trees: dict[str, Path], tmp_path: Path
 ) -> None:
     d = add_worktree(repo, tmp_path.resolve() / "D", "wt-d")
+    e = add_worktree(repo, tmp_path.resolve() / "E", "wt-e")
     args = run_as("perf", trees["C"], f"tester:{trees['A']}", f"developer:{trees['B']}",
-                  f"reviewer:{d}", extra=("--untimed",))  # fmt: skip
-    refused(repo, home, *args, says="at most two writers run at once")
+                  f"architect:{d}", f"reviewer:{e}", extra=("--untimed",))  # fmt: skip
+    refused(repo, home, *args, says="at most three writers run at once")
 
 
-def test_6_rule_2_at_most_two_writers(repo: Path, home: Path, trees: dict[str, Path]) -> None:
+def test_6_three_writers_run_at_once(repo: Path, home: Path, trees: dict[str, Path]) -> None:
     args = run_as("architect", trees["C"], f"tester:{trees['A']}", f"developer:{trees['B']}")
-    refused(repo, home, *args, says="at most two writers run at once")
+    assert "At most three writers run at once" in concurrency(ok(repo, home, *args))
+
+
+def test_6_rule_2_at_most_three_writers(
+    repo: Path, home: Path, trees: dict[str, Path], tmp_path: Path
+) -> None:
+    d = add_worktree(repo, tmp_path.resolve() / "D", "wt-d")
+    args = run_as("architect", trees["C"], f"tester:{trees['A']}", f"developer:{trees['B']}",
+                  f"orchestrator:{d}")  # fmt: skip
+    refused(repo, home, *args, says="at most three writers run at once")
 
 
 def test_6_rule_3_two_writers_in_one_worktree(
@@ -548,7 +561,7 @@ def test_6_read_only_is_derived_from_an_empty_write_limit(
         code = stop.code
     out = capsys.readouterr()
     assert code in (0, None), out.err
-    assert "read-only agents do not count toward the two" in collapsed(out.out)
+    assert "read-only agents do not count toward the three" in collapsed(out.out)
 
 
 # ---------------------------------------------------------------- 7. Ola
@@ -627,9 +640,11 @@ WRITE_LIMITS = {
 
 
 @pytest.mark.parametrize("persona", PERSONAS)
-def test_8_the_note_file_is_named_under_the_main_checkout_and_not_created(
+def test_8_the_note_file_is_named_under_the_main_checkout_and_made_for_a_writer(
     repo: Path, home: Path, trees: dict[str, Path], persona: str
 ) -> None:
+    """3.6: a writer's note file is made at brief time, so its area entry lives
+    until the spawner deletes it; a reader's is named and not made."""
     args = [persona, "--worktree", str(trees["A"]), "--beside", "none"]
     if persona in NEEDS_INCREMENT:
         args += ["--increment", INCREMENT]
@@ -637,7 +652,8 @@ def test_8_the_note_file_is_named_under_the_main_checkout_and_not_created(
     pattern = rf"{re.escape(str(repo.resolve()))}/\.claude/current-task/{persona}-A-(\d{{6}})\.md"
     found = re.search(pattern, output)
     assert found is not None, "the note path is not under the main checkout"
-    assert not (repo / ".claude" / "current-task" / f"{persona}-A-{found.group(1)}.md").exists()
+    made = (repo / ".claude" / "current-task" / f"{persona}-A-{found.group(1)}.md").exists()
+    assert made == bool(WRITE_LIMITS[persona])
     assert not (trees["A"] / ".claude" / "current-task").exists()
 
 
@@ -740,11 +756,12 @@ def test_t3_an_existing_note_file_gets_a_numbered_name(
     assert (tasks / "architect-h16-094230.md").read_text() == "taken\n"
 
 
-def test_t3_the_same_worktree_in_the_same_second_names_the_same_file_until_it_exists(
+def test_t3_the_same_worktree_in_the_same_second_gets_a_new_file_once_it_exists(
     frozen_brief: Any, h15_h16: tuple[Path, Path]
 ) -> None:
-    """brief.py names the file and does not create it, so two runs agree (test 1)."""
-    assert frozen_brief(h15_h16[1]) == frozen_brief(h15_h16[1])
+    """3.6: a writer's brief makes its note file, so a second brief numbers its own."""
+    assert frozen_brief(h15_h16[1]) == "architect-h16-094230.md"
+    assert frozen_brief(h15_h16[1]) == "architect-h16-094230-2.md"
 
 
 # ---------------------------------------------------------------- 9. hash
@@ -952,3 +969,128 @@ def test_h34_10_the_fast_lane_is_refused_for_any_other_persona(
     """The reason is pinned, not just the flag: argparse's own refusal of an
     unknown option also names `--lane fast`."""
     refused(repo, home, *args_for(persona, repo, *FAST), says="--lane fast is for @developer only")
+
+
+# ------------------------------------------------ pipe 3.6: three writers, never on the same files
+# Each writer's brief records (persona, worktree, branch, item, area) in
+# `<git common dir>/areas.json`. The area is what the branch changes against
+# its base, plus, before its first commit, the write limit narrowed by --area.
+
+
+SAME = "would write the same files: "
+
+
+def areas(repo: Path) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = json.loads((repo / ".git" / "areas.json").read_text())
+    return entries
+
+
+def area_brief(tree: Path, *area: str, persona: str = "developer", item: str = "") -> list[str]:
+    args = [persona, "--worktree", str(tree), "--beside", "none"]
+    args += ["--lane", "fast"] if persona == "developer" else []
+    args += ["--increment", INCREMENT] if persona in ("tester", "reviewer") else []
+    return [*args, *(["--item", item] if item else []), *(["--area", *area] if area else [])]
+
+
+def note_of(output: str, repo: Path) -> Path:
+    found = NOTE.search(output)
+    assert found is not None, output
+    return repo / ".claude" / "current-task" / found.group(1)
+
+
+def test_areas_a_writer_is_recorded_with_its_area(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    output = ok(repo, home, *area_brief(trees["A"], "tools/brief.py", "tests/", item="x"))
+    (entry,) = areas(repo)
+    assert entry["persona"] == "developer"
+    assert entry["worktree"] == str(trees["A"].resolve())
+    assert entry["branch"] == "wt-a"
+    assert entry["item"] == "x"
+    assert set(entry["area"]) == {"tools/brief.py", "tests/"}
+    assert note_of(output, repo).is_file()
+    assert sorted(p.name for p in (repo / ".git").glob("areas*")) == ["areas.json"]
+
+
+def test_areas_a_reader_is_not_recorded(repo: Path, home: Path, trees: dict[str, Path]) -> None:
+    ok(repo, home, *area_brief(trees["A"], persona="reviewer"))
+    assert not (repo / ".git" / "areas.json").exists() or areas(repo) == []
+
+
+def test_areas_an_overlapping_writer_is_refused_naming_both(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    ok(repo, home, *area_brief(trees["A"], "tools/", item="first"))
+    said = refused(repo, home, *area_brief(trees["B"], "tools/brief.py", item="second"),
+                   says=f"{SAME}tools/brief.py")  # fmt: skip
+    for name in (str(trees["A"].resolve()), str(trees["B"].resolve()), "first", "second"):
+        assert name in said, said
+    assert len(areas(repo)) == 1
+
+
+def test_areas_disjoint_writers_run_together(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    ok(repo, home, *area_brief(trees["A"], "tools/"))
+    ok(repo, home, *area_brief(trees["B"], "src/"))
+    ok(repo, home, *area_brief(trees["C"], "src_python/"))  # src/ is no prefix of src_python/
+    assert len(areas(repo)) == 3
+
+
+def test_areas_without_area_the_write_limit_is_the_area(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    ok(repo, home, *area_brief(trees["A"]))
+    refused(repo, home, *area_brief(trees["B"], "tools/x.py"), says=f"{SAME}tools/x.py")
+    ok(repo, home, *area_brief(trees["C"], persona="perf"))  # docs/benchmarks/
+
+
+def test_areas_an_area_outside_the_write_limit_is_refused(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    refused(repo, home, *area_brief(trees["A"], "src/", persona="tester"),
+            says="--area src/ is outside the write limit")  # fmt: skip
+
+
+def test_areas_an_entry_is_dropped_when_its_note_file_is_gone(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    note_of(ok(repo, home, *area_brief(trees["A"], "tools/")), repo).unlink()
+    ok(repo, home, *area_brief(trees["B"], "tools/"))
+    assert [e["worktree"] for e in areas(repo)] == [str(trees["B"].resolve())]
+
+
+def test_areas_an_entry_is_dropped_when_its_worktree_is_gone(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    ok(repo, home, *area_brief(trees["A"], "tools/"))
+    git(repo, "worktree", "remove", "--force", str(trees["A"]))
+    ok(repo, home, *area_brief(trees["B"], "tools/"))
+
+
+def test_areas_a_new_brief_in_the_same_worktree_replaces_its_entry(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    ok(repo, home, *area_brief(trees["A"], "tools/"))
+    ok(repo, home, *area_brief(trees["A"], "tools/"))
+    assert len(areas(repo)) == 1
+
+
+def test_areas_the_branch_diff_is_read_again_on_each_check(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    ok(repo, home, *area_brief(trees["A"], "tools/"))
+    write(trees["A"], "src/x.cpp", "int x;\n")
+    git(trees["A"], "add", "src/x.cpp")
+    git(trees["A"], "commit", "-q", "-m", "x")
+    refused(repo, home, *area_brief(trees["B"], "src/x.cpp"), says=f"{SAME}src/x.cpp")
+
+
+def test_areas_a_fourth_running_writer_is_refused(
+    repo: Path, home: Path, trees: dict[str, Path], tmp_path: Path
+) -> None:
+    ok(repo, home, *area_brief(trees["A"], "tools/"))
+    ok(repo, home, *area_brief(trees["B"], "src/"))
+    ok(repo, home, *area_brief(trees["C"], persona="tester"))
+    d = add_worktree(repo, tmp_path.resolve() / "D", "wt-d")
+    refused(repo, home, *area_brief(d, "include/"), says="at most three writers run at once")
