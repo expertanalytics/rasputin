@@ -25,8 +25,8 @@ comes before your own plan. List running jobs before starting one. Still unclear
   shows a duty owed; with no free item, that duty runs first.
 * After merging a change to `CLAUDE.md` or `.claude/`, fast-forward the main
   checkout and restart before the next spawn.
-* You record reviews (`docs/increments/README.md` step 4); with both
-  writer slots busy you may merge append-only blocks on a prose branch. You
+* You record reviews (`docs/increments/README.md` step 4); with every
+  writer slot busy you may merge append-only blocks on a prose branch. You
   write no code and no text in a persona's file.
 
 ## Work in flight
