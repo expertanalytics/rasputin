@@ -160,9 +160,13 @@ def _inside(path: str, prefix: str) -> bool:
 
 def _area(worktree: str, declared: list[str]) -> set[str]:
     """Pipe 3.6: what the branch changes against its base, plus `declared` before its
-    first commit. The base is where it leaves origin/master (master without a remote)."""
-    base = _git(worktree, "merge-base", "HEAD", "origin/master") or \
-        _git(worktree, "merge-base", "HEAD", "master")  # fmt: skip
+    first commit. The base is where it leaves the master of its upstream's remote (a
+    private-repo branch shares no recent history with origin/master; a pushed branch's
+    upstream is its own copy), else origin/master, else master."""
+    up = _git(worktree, "rev-parse", "--abbrev-ref", "@{upstream}") or ""
+    refs = (up if up.endswith("master") else up.partition("/")[0] + "/master",
+            "origin/master", "master")  # fmt: skip
+    base = next(filter(None, (_git(worktree, "merge-base", "HEAD", r) for r in refs)), None)
     changed = set((_git(worktree, "diff", "--name-only", base, "HEAD") or "").splitlines()
                   if base else ())  # fmt: skip
     return changed | set(declared) if base in (None, _git(worktree, "rev-parse", "HEAD")) \
@@ -193,8 +197,11 @@ def _overlap(mine: dict[str, str | list[str]], running: list[dict[str, str | lis
         shared = sorted({b if _inside(b, a) else a for a in mine["area"] for b in theirs
                          if _inside(a, b) or _inside(b, a)})  # fmt: skip
         if shared:
-            raise BriefError(f"{name(mine)} and {name(other)} would write the same files: "
-                             f"{', '.join(shared)}")  # fmt: skip
+            raise BriefError(
+                f"{name(mine)} and {name(other)} would write the same files: "
+                + ", ".join(shared[:10])
+                + (f" and {len(shared) - 10} more" if shared[10:] else "")
+            )
 
 
 def _concurrency(persona: str, worktree: Path, beside: list[str], no_build: bool,
