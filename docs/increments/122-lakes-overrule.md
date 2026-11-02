@@ -1,6 +1,13 @@
 # Increment 122: NVE's lakes overrule the land cover, and no triangle is left without a class
 
-Status: **design** (`@architect`, 2026-11-01, on public master `ae33748e`;
+Status: **green** at `221e2cf7` (2026-11-02: `@developer`'s `518622bc`,
+then `@tester`'s two corrected tests, section 7b); section 8's checks pass
+at `1ec9d178` (`docs/benchmarks/2026-11-02/122-lakes-overrule/README.md`);
++362 counted lines against the estimate of +246 (section 10); next code
+review. Pins beyond the design are marked **As built** where the design
+names the behaviour (sections 3.4, 3.6, 3.7, 7 test 9, 7a fixture D,
+7b, 8); those that contradict it say so, for review to judge.
+Designed (`@architect`, 2026-11-01, on public master `ae33748e`;
 branch `worktree-lakes-overrule`; amended the same day for Ola's ruling
 on coverage gaps: a part of the domain no input file covers stops the run,
 and only `--land-cover-partial` fills it, sections 3.6 and 7; amended
@@ -245,9 +252,18 @@ is no data: without `--land-cover-partial` the run is refused (section
   `land_cover_code`. `.gpkg`: a `triangles` column `land_cover_filled`
   (`INTEGER` 0 or 1; NULL where `code` is NULL). `io/vtk_read.read_mesh`
   returns it (`MeshArrays.land_cover_filled`, None when absent).
+  **As built** (`@developer`'s pin): the `.ply` carries the property only
+  when some triangle is marked (`cli.py`: `face_filled=marks if marks is not
+  None and marks.any() else None`); the `.vtk` and `.gpkg` carry theirs
+  whenever there are codes, as designed. This narrows the design: a `.ply`
+  with nothing filled has no `land_cover_filled`.
 - Record keys `land_cover_filled` (triangles marked) and
   `land_cover_filled_m2` (their area, plus the area of the 0 shares moved,
   in the mesh CRS's plane), both 0 on a run with nothing to fill.
+  **As built, contradicting this:** with nothing filled,
+  `land_cover_filled` is 0 but `land_cover_filled_m2` is left out of the
+  record (`_fill`: "nothing filled: the count alone says so"; Lagan's and
+  Numedalslågen's records at `1ec9d178` have no such key).
 - One stderr line when any is filled:
   `land cover: 145 triangles (0.1078 km2) in no polygon took the nearest non-water class: 61 groups, the largest 0.0162 km2 at 147268 6814797 in EPSG:25833`
   (Bygdin with CORINE and NVE, by the prototype; the words are free, the
@@ -256,6 +272,10 @@ is no data: without `--land-cover-partial` the run is refused (section
 - `land_cover_codes` ends "0 = every constraint line; no triangle"
   instead of "0 = in no polygon, and every constraint line" (both paths,
   `src_python/tin_engine/cli.py@ae33748e:2148` and `:2565`).
+  **As built, contradicting "both paths":** the class-border path ends
+  "0 = every constraint line; no triangle"; the shares path
+  (`_class_fractions`) still writes "0 = no data, and every constraint
+  line", though no row and no cell keeps class 0 there (section 3.3).
 - `accept_no_class` in the class files is unchanged: it still lets a legend
   colour code 0 for the lines.
 
@@ -349,11 +369,14 @@ none held back):
     --land-cover or --prefer file (5 parts); missing land cover is refused.
     Add the file that covers it, or pass --land-cover-partial to fill each
     gap from the nearest non-water class and mark it:
-      5.8199 km2 around 136216 6830714 in EPSG:25833; covered by ar50-vestland-clean-25833
-      1.9929 km2 around 141916 6830806 in EPSG:25833; covered by ar50-vestland-clean-25833
+      5.8199 km2 around 136214 6830715 in EPSG:25833; covered by ar50-vestland-clean-25833
+      1.9929 km2 around 141916 6830809 in EPSG:25833; covered by ar50-vestland-clean-25833
       ...
 
-The CRS is `crs.crs_label(dem_crs)` on every line; areas to 4 decimals
+(Places as the code gives them, `1ec9d178`. Section 2's 136216 6830714
+came from a prototype on shapely's default tolerance, a thousandth of the
+part's box; the code uses step 3's `GAP_NOISE / 10`, 0.001 m, whose centre
+lies 591.364 m from the gap's edge against 589.716 m.) The CRS is `crs.crs_label(dem_crs)` on every line; areas to 4 decimals
 of km², places to the metre. "covered by" lists the hint for that part,
 and is absent when there is none.
 
@@ -377,14 +400,16 @@ refusal path.
 help: "Mesh even where no land-cover file covers the domain: each gap
 takes the nearest non-water class and is marked"). With it, the gap is
 reported, not refused: one stderr line
-`land cover: 7.8634 km2 of the domain in no file (5 parts, the largest 5.8199 km2 around 136216 6830714 in EPSG:25833), filled by --land-cover-partial`;
+`land cover: 7.8634 km2 of the domain in no file (5 parts, the largest 5.8199 km2 around 136214 6830715 in EPSG:25833), filled by --land-cover-partial`;
 then the run goes on, and section 3.2's fill gives the gap's triangles
 the nearest non-water class and marks them, exactly as an island's.
 Nothing else differs: the mark already tells a reader which triangles
 carry no data of their own. Record keys, written whenever a land cover is
 given: `land_cover_partial` ("on" or "off"), `land_cover_gap_m2` (the
 gap's area in the DEM CRS's plane, 0 when none) and `land_cover_gaps`
-(its parts). The MCP mesh tool gains no field: a manual override is a
+(its parts). **As built** (`@developer`'s pin): `land_cover_gap_m2` is
+written as text to one decimal (`"7863437.2"`, `"0.0"`), so the `--record`
+JSON holds a string, not a number; `land_cover_gaps` is a number. The MCP mesh tool gains no field: a manual override is a
 person's, and the agent gets the refusal naming the file to add
 (question 1).
 
@@ -428,6 +453,15 @@ by a triangle code:
   which are the map's areas, so `rest` is reached only by triangles in
   no polygon (prediction, checked at acceptance: Bygdin's codes equal
   master's but on the 145 island triangles).
+  **As built, contradicting this bullet's premise:** under `--edges all`
+  no `rest` is passed (`cli.py`: `rest = ... if ... not
+  choice.every_class else ()`). The code's comment: "unless the borders
+  are the whole map: there the clean-up moved them, and 0 is in no
+  polygon". The design passed `rest` under every `--edges` and relied on it
+  being reached only by triangles in no polygon; the code instead never
+  consults the unmoved map under `all`, so code 0 there means "in no
+  polygon of the moved borders". Bygdin's check 3 (section 8) marks
+  exactly 145 triangles, as predicted.
 - *The shares path* (`--shares`, or no class borders) codes from the
   map already (`_class_fractions` over `land.map.areas`); unchanged.
 
@@ -521,6 +555,14 @@ triangles, codes per column (CORINE: 322 heath, 333 sparse, 511 river,
    `land_cover_filled` is 1 exactly where today's code is 0, the record's
    `land_cover_filled` equals that count, and no `land_cover_fractions`
    row has code 0; the stderr line is printed once.
+   **As built, contradicting this scene** (`@tester`, `8d5711a5`): on the
+   covering `cover_polygons()` the prefer scene leaves nothing at code 0,
+   so test 9 runs on `test_cli_mesh_prefer.island_scene()`, test 19's
+   scene (heath 322 less L, lake 512 on L, `--prefer lake=` L less H), no
+   flag; and "marked" is checked against geometry, not against master's
+   code 0: a triangle is marked exactly where its share in H exceeds 1e-6
+   (section 3.3's mark, which also counts moved 0 shares), never where it
+   is under 1e-9, and none lies between.
 10. A refusal: a land cover whose only polygon lies outside the domain
     gives exit 2 naming `--land-cover` and section 3.6's words, one part,
     the domain's area (the red premise, checked first: today it exits 0
@@ -655,6 +697,10 @@ nothing, so master's figures there are this increment's too.
   `test_cleanup_every_source`'s `test_each_source_counts_its_own`,
   `test_cli_mesh_gpkg.f3` and `test_cli_mesh_multi_features.land_cover`
   (the first path only). `COVER_BOX` in C is the same box.
+  **As built, contradicting "the first path only"** (`@tester`):
+  `test_cli_mesh_multi_features.land_cover` covers the **last** path. Its
+  docstring: "an earlier file keeps an overlap's area, so a covered first
+  file would take every later file's polygons."
 - `test_cli_mesh_pieces_settled`: keep `@tester`'s heath around the
   ring, and go back to master's `--edges water`. Section 3.7 codes the
   heath from the map, so the piece has a class and master's mesh stands.
@@ -756,6 +802,22 @@ its map gains 322: 3,955,421.47 m²).
 - `test_cli_threads.py` (3 tests gappy on master's fixtures, no flag at
   `6ae4cd2a`) needs nothing once B and C cover.
 
+**7b. Tests corrected after green** (`@tester`, `221e2cf7`, test files only):
+
+- `test_coverage_gap.py::test_a_domain_no_polygon_reaches_is_one_part_the_whole_domain`
+  (section 6, "a domain no polygon reaches"): it pinned the place of a
+  40 x 30 rectangle at (20, 15). Every point of y = 15, 15 ≤ x ≤ 25 is a
+  largest inscribed circle's centre there (radius 15), so step 4 does not
+  fix one point; the test now pins that segment.
+- `test_cli_mesh_edges.py::test_10_a_box_wholly_inside_an_earlier_files_polygon_is_cut_away`
+  (K6, with the flag, no heath 322): its shares check `check_case7_shares`
+  is replaced. The gap and water 512's leftover east of the lake (no
+  non-water neighbour, section 3.1) take the nearest non-water class,
+  forest, and so do their 0 shares (section 3.3), so the forest share is
+  the domain less the preferred lake; the lake share is still the
+  preferred lake's, and the K6 figures (areas kept, edge lengths) are
+  unchanged.
+
 ## 8. Acceptance
 
 No `@perf` run (the Status line). Before review, on the green branch:
@@ -765,10 +827,13 @@ measured whether they hold any 0; the record's `land_cover_filled` says);
 Bygdin with `clc2018-clean-25833 --prefer lake=` NVE gives master's
 vertices and triangle set (corners sorted), codes equal but on the 145
 island triangles, of which the prototype puts 3 on another class than
-`_islands`, and record `land_cover_gaps` 0; Bygdin with
+`_islands` (**measured: 2**, both marked, 322 to 333), and record `land_cover_gaps` 0; Bygdin with
 `ar50-innlandet-clean-25833 --prefer lake=` NVE exits 2 before the mesh
 phase starts, listing 5 parts, 7.8634 km² in all, the largest 5.8199 km²
-around 136216 6830714 in EPSG:25833 (±1 m), each of the five naming
+around 136214 6830715 in EPSG:25833 (±1 m; the prediction said 136216
+6830714, from section 2's prototype on shapely's default tolerance; the
+code's 0.001 m, section 3.6, gives a centre 2.2 m away, 591.364 m from
+the gap's edge against the predicted point's 589.294 m), each of the five naming
 `ar50-vestland-clean-25833` and no other id (prediction from section 2's
 probe); the same with `--land-cover-partial` prints the gap line and the
 fill line with 2,623 triangles, 8.006 km² and 92 groups (the
@@ -803,6 +868,13 @@ modes (section 3.7): `rest` in `label_triangles`, `CoverLabels.rest` and
 the stderr words 10; the map's areas through `_land_cover` and
 `_write_piece` 6: +16. **Net about +246**. One PR, far under 700. Tests
 are not counted.
+
+**Measured:** **+362** net counted lines (422 added, 60 removed;
+`python3 tools/count_loc.py 5921a878 221e2cf7`), against the estimate of
++246. Per file: `cli.py` +180, `landcover.py` +96,
+`land_cover_map.py` +38, writers and reader +42 (`ply.py` +28 of
+them), `land_cover_fractions.py` +15, `run_record.py` +5,
+`preferred.py` −14.
 
 ## 11. Questions for Ola
 
