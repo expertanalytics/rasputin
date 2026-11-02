@@ -350,6 +350,22 @@ class TestSubdivide:
         assert abs(area_sum(pieces) / holed.area - 1.0) <= AREA
         assert abs(shapely.union_all(pieces).area / holed.area - 1.0) <= AREA
 
+    def test_a_hole_touching_the_ring_off_the_cut_line_gives_valid_pieces(
+        self, pf: ModuleType
+    ) -> None:
+        """[1, 4] x [0, 3] less the corner [1, 2] x [2, 3] and the hole
+        [2, 3] x [1, 2], which touches the outer ring at (2, 2), inside the
+        first half x <= 2.5: GEOS's rectangle clip joins hole and ring there
+        into one self-touching ring, an invalid half of the right area. Every
+        piece must be valid and the pieces must sum to 7."""
+        outer = [(1, 2), (2, 2), (2, 3), (4, 3), (4, 0), (1, 0), (1, 1), (1, 2)]
+        holed = Polygon(outer, [[(2, 1), (3, 1), (3, 2), (2, 2), (2, 1)]])
+        assert holed.is_valid and holed.area == 7.0
+        assert not shapely.clip_by_rect(holed, 1.0, 0.0, 2.5, 3.0).is_valid
+        pieces = list(pf.subdivide(holed, most=8))
+        assert all(p.is_valid for p in pieces)
+        assert abs(area_sum(pieces) / holed.area - 1.0) <= AREA
+
     def test_holes_count_and_are_kept(self, pf: ModuleType) -> None:
         """A square of 5 coordinates around a 1,000-gon hole: 1,006 in all, so
         it is cut, and the pieces' areas are the square's less the hole's."""
