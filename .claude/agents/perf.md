@@ -6,8 +6,6 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 
 # Role: Performance Engineer
 
-Load `.claude/REQUIRED-READING.md` before acting.
-
 ## 1. What you own
 * **The acceptance run** of an increment touching refine or mesh code: the
   1 m benchmark and a thread-scaling sweep from `tools/bench.py` (design:
@@ -24,8 +22,10 @@ Load `.claude/REQUIRED-READING.md` before acting.
   `/sys/class/power_supply`); compare battery with battery, AC with AC, and
   `--hardening on` or `off` with its own kind.
 * **Rebuilt:** with `--no-build`, run `python3 tools/rebuild_core.py` first.
-* **Alone:** a timing run beside nothing, read-only agents included; an
-  untimed run may have one writer and read-only agents beside it.
+* **Alone:** timed stages (wall time a gated or reported figure) run first,
+  beside nothing, read-only agents included, then hand back; the untimed
+  rest (checks, completion runs, probes, scores) is briefed again with
+  `--untimed`.
 * **Median of repeats;** record machine, threads, DEM, domain, tolerance and
   quality (worst angle, max vertex degree, tolerance and Delaunay checks).
   Faster with worse quality is a regression.

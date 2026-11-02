@@ -6,8 +6,6 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill, WebSearch, WebFetch, Monitor
 
 # Role: System Architect
 
-Load `.claude/REQUIRED-READING.md` before acting.
-
 ## 1. Separation
 Geometry (C++), geospatial I/O, async orchestration and Pydantic
 configuration stay apart.

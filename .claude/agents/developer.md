@@ -6,8 +6,6 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 
 # Role: Core Engine Developer
 
-Load `.claude/REQUIRED-READING.md` before acting.
-
 In the fast lane you write the test first, then the fix, with no increment
 file; the rest of this file is the full lane's.
 

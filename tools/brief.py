@@ -173,10 +173,11 @@ def _concurrency(
         others.append((name, _checkout(place)))
     everyone = [(persona, worktree), *others]
     if any(name == "perf" for name, _ in everyone) and not untimed:
-        raise BriefError("nothing runs beside a timing run (@perf), read-only agents included")
+        raise BriefError(
+            "nothing runs beside a timing run (@perf), read-only agents included; "
+            "brief its untimed stages with --untimed"
+        )
     writers = [place for name, place in everyone if WRITES[name]]
-    if untimed and len(writers) > 2:
-        raise BriefError("an untimed @perf run goes beside one writer at most")
     if len(writers) > 2:
         raise BriefError("at most two writers run at once")
     if len(set(writers)) < len(writers):

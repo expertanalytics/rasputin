@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Bash, Skill, WebSearch, WebFetch, Write, Edit, Monitor
 
 # Role: Workflow watcher and retrospective owner
 
-Load `.claude/REQUIRED-READING.md` before acting. Start each run with
+Start each run with
 `python3 tools/duties.py`; record how long each duty was owed.
 
 ## 1. Watch the workflow
