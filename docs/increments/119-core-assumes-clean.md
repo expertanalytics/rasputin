@@ -1,6 +1,11 @@
 # Increment 119: the core takes valid polygons only
 
-Status: **green** (`@architect`, 2026-11-01, on public master
+Status: **merged** (public PR #419, merge commit `5921a878`, 2026-11-01):
+red `b482cf27`, green `8b458b8e`, code review round 1 approved with
+wordings at `8b458b8e`, applied in `2d9ee819`, which the PR's second
+verdict line approves; 31 net counted lines against the estimate of +5 (section 11).
+No mutation round: no suite is named invariant-critical (section 7).
+Designed (`@architect`, 2026-11-01, on public master
 `ae33748e`; branch `worktree-core-assumes-clean`; amended the same day:
 115's switch done, and Ola's ruling that the refusal names the catalogue's
 clean sibling, section 3; amended after the red suite: `clean_sibling` takes the CRS label, so `sources` keeps its layer, and `@tester`'s pins adopted, sections 3 and 7). Full lane (it deletes
@@ -433,6 +438,12 @@ calls 5, the reservoir read moved up 8; the amendment's sibling:
 `InvalidPolygons` 2, `clean_sibling` 7, `_invalid` 8, its three call sites
 and `known` passed to `_land_cover_map` 8): **net about +5** (an
 estimate, before the amendment −20). One PR, far under 700.
+
+**Measured:** **31** net counted lines (117 added, 86 removed;
+`python3 tools/count_loc.py ae33748e 5921a878`), against the estimate of
++5. Why, from the review: `_refuse_invalid` took about 40 lines with the
+fid sort, the message and the moved-note, and removing the land-cover
+map's repair saved less than estimated.
 
 ## 12. Questions for Ola
 
