@@ -226,7 +226,7 @@ class TestTheFile:
         # 11"); RemoteSource has none, so the catalogue key stands in: it is the
         # name `--land-cover` and `fetch` take, so a reader can act on it.
         assert run.string("land_cover_codes") == (
-            f"{KEY} class number; 0 = no data, and every constraint line"
+            f"{KEY} class number; 0 = every constraint line; no triangle"
         )
         assert run.string("land_cover_source") == f"{KEY}, 2025"
         credit = run.string("land_cover_credit")

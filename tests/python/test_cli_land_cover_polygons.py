@@ -24,9 +24,9 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 - Rows are compared by value with an absent class read as 0, so a share
   under 1e-6 left out on one side and kept on the other is not a finding.
 - A vector file's record strings: `land_cover_source` is the file's name,
-  `land_cover_codes` is `<file name> class number; 0 = no data, and every
-  constraint line`, and no credit, licence or citation is written; a
-  catalogue source is named by its id, as the raster route does.
+  `land_cover_codes` is `<file name> class number; 0 = every constraint
+  line; no triangle` (increment 122, section 3.4), and no credit, licence
+  or citation is written; a catalogue source is named by its id, as the raster route does.
 - A vector file with no class file, a class file without `code_system`, or
   with `--land-cover-year`, is a usage error (exit 2) naming the option,
   before any phase is timed (the class file's refusal also names
@@ -53,7 +53,7 @@ from pyproj import Transformer
 from shapely.geometry import Polygon, box
 from shapely.geometry.base import BaseGeometry
 
-from cli_helpers import USAGE, invoke, squashed
+from cli_helpers import USAGE, invoke, plain, runner, squashed
 from dataset_fixtures import write_sources
 from feature_fixtures import Feat, classes, write_geojson
 from fraction_fixtures import (
@@ -72,6 +72,7 @@ from landcover_fixtures import CORINE_WATER
 from legend_fixtures import basenames, coded_map, legend_text, write
 from plyread import parse_header, read_ply
 from recordread import file_field
+from tin_engine.cli import app
 from tin_engine.io.repository import FeatureManifest
 from tin_engine.stats import PhaseClock
 from vector_fixtures import vector_entry
@@ -271,7 +272,7 @@ class TestTheFile:
     def test_the_record_strings_name_the_file(self, run: VtkFile) -> None:
         assert file_field(run, "land_cover_source") == POLYGONS
         assert file_field(run, "land_cover_codes") == (
-            f"{POLYGONS} class number; 0 = no data, and every constraint line"
+            f"{POLYGONS} class number; 0 = every constraint line; no triangle"
         )
         assert not set(CREDIT_FIELDS) & set(run.field_data), sorted(run.field_data)
 
@@ -335,6 +336,100 @@ class TestAr50SubClasses:
         )
         assert code == 0, output
         assert {3031, 81} <= set().union(*rows_of(*table(read_vtk(target.read_bytes()))))
+
+
+# ------------------------------------------------------------ water only, every share 0
+
+
+#: Holes of `HOLE` m on a grid of `PITCH` m: 4 % of the area, so no triangle's
+#: largest share is class 0; that every triangle at `--tolerance WIDE` meets
+#: some is checked, not assumed (`test_every_triangle_is_water_with_a_0_share`).
+HOLE, PITCH, WIDE = 20.0, 100.0, "1000"
+#: A shares run by `--shares`, and by no class borders (no `--edges`).
+WET_PATHS = pytest.mark.parametrize(
+    "extra", [("--shares",), ()], ids=["shares", "no-class-borders"]
+)
+
+
+def wet_cover() -> list[tuple[int, BaseGeometry]]:
+    """Lake 512 west and river 511 east over the DEM's box widened by half a
+    cell, split on a line no hole meets; both pierced by square holes on a
+    grid, every corner off-node. The holes are a coverage gap (in no
+    polygon), so the run needs `--land-cover-partial`; nothing is land."""
+    x0, y0 = dem_origin()
+    west, north = x0 - 30.0, y0 + 30.0
+    side = 39 * 60.0 + 60.0
+    middle = west + 12 * PITCH
+    holes = [
+        box(west + i * PITCH + 40.3, north - j * PITCH - 60.7,
+            west + i * PITCH + 40.3 + HOLE, north - j * PITCH - 60.7 + HOLE)
+        for i in range(int(side // PITCH)) for j in range(int(side // PITCH))
+    ]  # fmt: skip
+    pierced = box(west, north - side, west + side, north).difference(shapely.union_all(holes))
+    lake = pierced.intersection(box(west, north - side, middle, north))
+    river = pierced.intersection(box(middle, north - side, west + side, north))
+    return [(512, lake), (511, river)]
+
+
+class TestWaterOnly:
+    """Review round 1, point 1 (`docs/increments/122-lakes-overrule.md`,
+    section 6, "Water-only donors"): a shares run where every triangle is
+    water and every triangle has a 0 share, with `--land-cover-partial`. No
+    triangle is a donor, so each triangle's 0 share joins its own water code,
+    and the triangle is marked; the run exits 0. `--tolerance 1000` keeps the
+    triangles wide. With class borders (`--edges all`) a hole is its own
+    triangles, code 0, filled from the water around it: another path, which
+    meets donors, so not here."""
+
+    @staticmethod
+    def run(tmp_path: Path, dem: Path, domain: Path, extra: tuple[str, ...]) -> VtkFile:
+        cover = write_cover_geojson(tmp_path / "wet.geojson", wet_cover())
+        target = tmp_path / "x.vtk"
+        result = runner.invoke(app, [
+            "mesh", "--dem", str(dem), "--domain", str(domain), "--tolerance", WIDE,
+            "--out", str(target), "--land-cover", str(cover), "--land-cover-classes", "corine",
+            "--land-cover-partial", *extra,
+        ])  # fmt: skip
+        assert result.exit_code == 0, (repr(result.exception), plain(result.output))
+        return read_vtk(target.read_bytes())
+
+    @WET_PATHS
+    def test_every_triangle_is_water_with_a_0_share(
+        self, tmp_path: Path, dem: Path, domain: Path, extra: tuple[str, ...]
+    ) -> None:
+        """The premise, by GEOS on the triangles written: both water codes are
+        some triangle's code, so "its own" decides."""
+        run = self.run(tmp_path, dem, domain, extra)
+        want = oracle_rows(run.points, triangles_of(run), wet_cover())
+        assert {k for row in want for k in row} == {0, 511, 512}
+        codes = np.asarray(run.cell_array("land_cover_code").values)[len(run.lines) :]
+        assert set(codes.tolist()) == {511, 512}
+        assert all(row.get(0, 0.0) > FRACTION for row in want), "a triangle meets no hole"
+        assert all(row[0] < max(v for k, v in row.items() if k) for row in want)
+
+    @WET_PATHS
+    def test_each_0_share_joins_the_triangles_own_water_code(
+        self, tmp_path: Path, dem: Path, domain: Path, extra: tuple[str, ...]
+    ) -> None:
+        run = self.run(tmp_path, dem, domain, extra)
+        rows = rows_of(*table(run))
+        codes = np.asarray(run.cell_array("land_cover_code").values)[len(run.lines) :]
+        want = oracle_rows(run.points, triangles_of(run), wet_cover())
+        for t, (got, w) in enumerate(zip(rows, want, strict=True)):
+            assert codes[t] == max((k for k in w if k), key=lambda k: (w[k], -k)), (t, w)
+            merged = {k: v for k, v in w.items() if k}
+            merged[int(codes[t])] += w[0]
+            assert by_value([got], [merged], FRACTION) == [], (t, got, w)
+
+    @WET_PATHS
+    def test_every_triangle_is_marked(
+        self, tmp_path: Path, dem: Path, domain: Path, extra: tuple[str, ...]
+    ) -> None:
+        run = self.run(tmp_path, dem, domain, extra)
+        marks = np.asarray(run.cell_array("land_cover_filled").values)
+        lines = len(run.lines)
+        assert not marks[:lines].any()
+        assert marks[lines:].all(), marks[lines:]
 
 
 # ------------------------------------------------------------ the other readers and CRSs

@@ -173,7 +173,7 @@ class TestByPath:
         vtk = read_vtk(target.read_bytes())
         assert file_field(vtk, "land_cover_source") == FILE_NAME
         assert file_field(vtk, "land_cover_codes") == (
-            f"{FILE_NAME} class number; 0 = no data, and every constraint line"
+            f"{FILE_NAME} class number; 0 = every constraint line; no triangle"
         )
 
     def test_a_land_cover_map_names_and_colours_the_gpkg(

@@ -46,8 +46,9 @@ PINNED BY THESE SUITES (the design names the parts, not their spelling):
   (exit 2) naming the option; an object not in the cache is refused naming
   the key and `fetch`, with no traceback; an unknown key and a run with
   neither `--cache` nor `RASPUTIN_DATA` are usage errors too. The file's
-  strings: `land_cover_codes` is `<source id> class number; 0 = no data, and
-  every constraint line` and `land_cover_source` is `<source id>, <year>`
+  strings: `land_cover_codes` is `<source id> class number; 0 = every
+  constraint line; no triangle` (increment 122, section 3.4) and
+  `land_cover_source` is `<source id>, <year>`
   (1.6 spells both with a display name `RemoteSource` does not have; the id
   is the name `--land-cover` and `fetch` take), `land_cover_credit` the
   source's credit rendered with the fetch date and the URL,

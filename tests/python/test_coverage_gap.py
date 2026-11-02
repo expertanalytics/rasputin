@@ -4,7 +4,7 @@ domain no land-cover or `--prefer` polygon covers.
 `docs/increments/122-lakes-overrule.md`, section 3.6 (what a gap is: tiles,
 parts, noise, place), section 6 (a domain no polygon reaches; a part on the
 domain's border) and section 7, tests 13 to 16. Squares in metres, one
-projected plane; `CoverageGap` is a `FeatureError`.
+projected plane.
 
 THE ORACLE: the gaps are boxes worked by hand, so their areas are exact up to
 rounding (`M2` = 1e-9 m² on areas up to 2e6 m²: corners on whole or tenth
@@ -57,12 +57,6 @@ ORIGIN_IDS = ["origin", "utm-scale"]
 def test_the_chosen_constants(lcm: Any) -> None:
     assert lcm.GAP_NOISE == 0.01
     assert lcm.GAP_TILE == 5000.0
-
-
-def test_coverage_gap_is_a_feature_error(lcm: Any) -> None:
-    from tin_engine.feature_input import FeatureError
-
-    assert issubclass(lcm.CoverageGap, FeatureError)
 
 
 # ------------------------------------------------------------ test 13

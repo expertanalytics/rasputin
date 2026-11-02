@@ -24,8 +24,9 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 
 - One part is "(1 part)", more "(N parts)".
 - `land_cover_gaps` is the number of parts and `land_cover_gap_m2` a number,
-  each written as the `run` table's value; `land_cover_partial` is "on" or
-  "off"; with no land cover none of the three is written.
+  each written as the `run` table's value; `land_cover_filled_m2` is text
+  `"%.1f"`, `"0.0"` when nothing is filled (review round 1, point 2);
+  `land_cover_partial` is "on" or "off"; with no land cover none of the three is written.
 - The `.gpkg`'s `land_cover_filled` is 0 or 1 on every triangle that has a
   `code`.
 - The hint's ids in "covered by" are separated by ", ".
@@ -308,8 +309,26 @@ def test_18_with_full_cover_no_gap_and_the_override_off(
         gap = record(conn, "land_cover_gap_m2")
         assert gap is not None and float(gap) == 0.0
         assert record(conn, "land_cover_filled") == "0"
+        assert record(conn, "land_cover_filled_m2") == "0.0", "nothing filled is still recorded"
         _, marks = codes_and_marks(conn)
         assert not marks.any()
+
+
+def test_18_nothing_filled_records_the_area_as_text_in_the_json(
+    tmp_path: Path, dem: Path, domain: Path
+) -> None:
+    """Review round 1, point 2: `land_cover_filled_m2` is always in the
+    record, as text `"%.1f"`, so the `--record` JSON holds `"0.0"`, a string,
+    when nothing is filled."""
+    import json
+
+    cover = write_cover_geojson(tmp_path / "cover.geojson", cover_polygons())
+    rec = tmp_path / "x.json"
+    code, output = mesh(dem, domain, tmp_path / "x.gpkg", *corine(cover), "--record", str(rec))
+    assert code == 0, output
+    got = json.loads(rec.read_text(encoding="ascii"))
+    assert got["land_cover_filled"] == 0
+    assert got.get("land_cover_filled_m2") == "0.0", got
 
 
 # ------------------------------------------------------------ test 19, an island
@@ -341,6 +360,35 @@ def test_19_an_island_fills_without_the_override(tmp_path: Path, dem: Path, doma
     assert (marks[inside] == 1).all()
     assert (marks[~inside] == 0).all()
     assert not (codes == 0).any()
+
+
+#: On `land_cover_filled_m2`, m²: `"%.1f"` rounds by at most 0.05; the
+#: oracle's float64 sum over areas up to 4e4 m² adds under 1e-9.
+FILLED_M2 = 0.05 + 1e-6
+
+
+def test_19_the_filled_area_is_text_to_one_decimal(tmp_path: Path, dem: Path, domain: Path) -> None:
+    """Review round 1, point 2: with triangles filled, `land_cover_filled_m2`
+    is text `"%.1f"`, in the `.gpkg`'s `run` table and as a string in the
+    `--record` JSON, and is the marked triangles' plan area (no shares on
+    this path), recomputed by GEOS from the triangles written."""
+    import json
+
+    lake, hole, cover = island_scene()
+    land = write_cover_geojson(tmp_path / "cover.geojson", cover)
+    preferred = write_lake(tmp_path / "lake.geojson", lake.difference(hole))
+    target, rec = tmp_path / "x.gpkg", tmp_path / "x.json"
+    args = corine(land, "--prefer", f"lake={preferred}", "--edges", "all", "--record", str(rec))
+    code, output = mesh(dem, domain, target, *args)
+    assert code == 0, output
+    with closing(sqlite3.connect(target)) as conn:
+        _, marks = codes_and_marks(conn)
+        area = shapely.area(shapely.polygons(corners(conn)[:, :, :2]))
+        text = record(conn, "land_cover_filled_m2")
+    assert marks.any(), "the island is filled"
+    assert text is not None and re.fullmatch(r"\d+\.\d", text), text
+    assert abs(float(text) - float(area[marks == 1].sum())) <= FILLED_M2, text
+    assert json.loads(rec.read_text(encoding="ascii"))["land_cover_filled_m2"] == text
 
 
 # ------------------------------------------------------------ test 20, the hint
@@ -486,7 +534,9 @@ def test_11_bygdin_with_nve_lakes_no_code_0_and_the_islands_marked(
     assert code == 0, output
     record_json = json.loads(rec.read_text(encoding="ascii"))
     assert record_json["land_cover_filled"] == 145
-    assert record_json["land_cover_filled_m2"] / 1e6 == pytest.approx(0.1078, abs=1e-4)
+    filled_m2 = record_json["land_cover_filled_m2"]  # text, "%.1f" (review round 1)
+    assert isinstance(filled_m2, str) and re.fullmatch(r"\d+\.\d", filled_m2), filled_m2
+    assert float(filled_m2) / 1e6 == pytest.approx(0.1078, abs=1e-4)
     assert record_json["land_cover_gaps"] == 0
     mesh_read = read_mesh(target.read_bytes())
     codes = mesh_read.land_cover_code
