@@ -79,7 +79,7 @@ UNITS = [
 ]
 SQUARE = local(box(0, 0, 3000, 3000))
 RING = [(float(x), float(y)) for x, y in list(SQUARE.exterior.coords)[:-1]]
-LAND_COVER = ("--land-cover", KEY, "--land-cover-classes", "mapbiomas-c11")
+LAND_COVER = ("--land-cover-partial", "--land-cover", KEY, "--land-cover-classes", "mapbiomas-c11")
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ def scene(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Path]:
         "dem": dem,
         "domain": geojson(tmp_path / "domain.geojson", RING, crs=MESH_CRS),
         "units": write_units(tmp_path / "units.geojson", UNITS),
-        "cache": write_class_cache(tmp_path / "cache"),
+        "cache": write_class_cache(tmp_path / "cache", no_data=True),
     }  # fmt: skip
 
 
@@ -204,6 +204,11 @@ MASTER_ROWS = json.loads((Path(__file__).parent / "data/catchments_rows_e8251ee8
 #: no x, y or area, z by 6.1e-5 m, slope by 1.3e-4 deg and aspect by
 #: 1.2e-3 deg; a vertex moved by 1.5 mm, or its z by 1 cm, fails.
 ATOL, ATOL_DEG = 1e-3, 1e-2
+#: The columns a triangle's class decides: the fill's on a marked triangle (122).
+FILLED_COLUMNS = frozenset(
+    {"code", "land_cover", "colour", "glacier", "lake", "reservoir", "forest", "unspecified",
+     "savanna"}
+)  # fmt: skip
 
 
 def rows_of(conn: sqlite3.Connection, table: str) -> dict[str, list[object]]:
@@ -219,12 +224,23 @@ def rows_of(conn: sqlite3.Connection, table: str) -> dict[str, list[object]]:
 def assert_masters(
     conn: sqlite3.Connection, table: str, masters: dict[str, Any] = MASTER_ROWS
 ) -> None:
-    """The table's rows equal `masters`' within ATOL and ATOL_DEG."""
+    """The table's rows equal `masters`' within ATOL and ATOL_DEG; since
+    `docs/increments/122-lakes-overrule.md`, on a triangle marked
+    `land_cover_filled` (its code filled or its 0 share moved) the columns
+    the class decides are the fill's, so only the unmarked rows are compared
+    there, and no code is 0."""
     got, master = rows_of(conn, table), masters[table]
+    marked = np.array(rows_of(conn, "triangles")["land_cover_filled"]) == 1
+    got.pop("land_cover_filled", None)
     assert list(got) == master["columns"]
+    if "code" in got:
+        assert 0 not in got["code"], f"{table}.code keeps 0"
     for i, name in enumerate(master["columns"]):
         want = [row[i] for row in master["rows"]]
         where = f"{table}.{name}"
+        if name in FILLED_COLUMNS:
+            got[name] = [v for v, m in zip(got[name], marked, strict=True) if not m]
+            want = [v for v, m in zip(want, marked, strict=True) if not m]
         if name == "geom":
             assert [len(g) for g in got[name]] == [len(g) for g in want], where
             got_xyz, want_xyz = np.concatenate(got[name]), np.concatenate(want)

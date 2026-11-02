@@ -275,19 +275,22 @@ def write_triangles(
     palette: Palette | None,
     srs_id: int,
     batch: int = 100_000,
+    filled: Any | None = None,
 ) -> None:
     """The ``triangles`` layer: one PolygonZ row per triangle, in triangle order
     (``fid - 1`` is the index), with ``code``, ``land_cover``, ``colour``
     (NULL on every row when ``codes`` is None), the three corner heights, the
-    plan area and the slope; registered and indexed. Rows and blobs are built
+    plan area, the slope and ``land_cover_filled`` (1 where ``filled``, else
+    0; NULL when ``codes`` is None); registered and indexed. Rows and blobs are built
     per ``batch`` from array slices, in one transaction."""
     points = np.asarray(vertices, dtype=np.float64)
     faces = np.asarray(triangles)
     conn.execute(
         "CREATE TABLE triangles (fid INTEGER PRIMARY KEY, geom POLYGON, code INTEGER, "
         "land_cover TEXT, colour TEXT, z_min REAL, z_max REAL, z_mean REAL, area_m2 REAL, "
-        "slope_deg REAL)"
+        "slope_deg REAL, land_cover_filled INTEGER)"
     )
+    marks = np.zeros(len(faces), np.int64) if filled is None else np.asarray(filled, np.int64)
     boxes = np.empty((len(faces), 4))
     with _transaction(conn):
         for start in range(0, len(faces), batch):
@@ -301,10 +304,11 @@ def write_triangles(
             z = xyz[:, :, 2]
             if codes is None:
                 code: list[Any] = [None] * (stop - start)
-                name, colour = code, code
+                name, colour, mark = code, code, code
             else:
                 code = np.asarray(codes)[start:stop].tolist()
                 name, colour = _looked_up(code, palette or {})
+                mark = marks[start:stop].tolist()
             rows = zip(
                 range(start + 1, stop + 1),
                 blobs,
@@ -316,9 +320,10 @@ def write_triangles(
                 z.mean(1).tolist(),
                 area.tolist(),
                 np.degrees(slope).tolist(),
+                mark,
                 strict=True,
             )
-            conn.executemany("INSERT INTO triangles VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+            conn.executemany("INSERT INTO triangles VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
     register_layer(conn, "triangles", "POLYGON", srs_id, _bounds(boxes), z=True)
     build_rtree(conn, "triangles", boxes, batch)
 

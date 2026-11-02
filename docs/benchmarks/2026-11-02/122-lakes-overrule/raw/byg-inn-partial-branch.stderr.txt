@@ -1,0 +1,11 @@
+land cover: 7.8634 km2 of the domain in no file (5 parts, the largest 5.8199 km2 around 136214 6830715 in EPSG:25833), filled by --land-cover-partial
+edges: 8 kept (7 cut at the domain outline), 940 outside the domain, 0 empty
+lines: 62520 vertices read, 31650 after joining shared edges and adding crossings
+DEM: 2 files, 3314 columns x 2195 rows
+land cover: 2623 triangles (8.0061 km2) in no polygon took the nearest non-water class: 92 groups, the largest 5.8199 km2 at 136410 6830560 in EPSG:25833
+land cover: 791 areas between lines; 92 in no polygon, 0 in more than one (the smallest wins), 0 too narrow to label with certainty
+125811 triangles. Every DEM node inside the mesh is within 10 m of it (largest difference 9.9976 m).
+DEM heights read as metres; the file does not say. If they are feet, give --z-unit ft or us-ft.
+real 7.86
+user 8.77
+sys 0.37

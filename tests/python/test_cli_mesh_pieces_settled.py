@@ -143,7 +143,15 @@ def test_a_partition_line_through_a_water_ring(tmp_path: Path) -> None:
     crossings = shapely.get_coordinates(lake.exterior.intersection(seam))
     assert len(crossings) == 2
     assert not any(float((cy - pf.TIE_Y) / pf.H).is_integer() for _, cy in crossings), "on a node"
-    lakes = write_geojson(tmp_path / "lake.geojson", [Feat("l", lake, {"Code_18": "512"})])
+    # Heath around the lake, so the land cover covers the domain
+    # (`docs/increments/122-lakes-overrule.md`: a coverage gap is refused);
+    # `--edges water` follows the ring alone, and the heath takes its code
+    # from the map.
+    heath = shapely.box(*Polygon(pf.SQUARE).buffer(10.0).bounds).difference(lake)
+    lakes = write_geojson(
+        tmp_path / "lake.geojson",
+        [Feat("l", lake, {"Code_18": "512"}), Feat("h", heath, {"Code_18": "322"})],
+    )
     water = ("--land-cover", str(lakes), "--land-cover-classes", "corine", "--edges", "water")
     as_read = ("--edges-repair", "0", "--edges-max-shift", "0", "--edges-outline-snap", "0")
     done = pf.cut(tmp_path / "run", *args(dem, domain, "--pieces", "4", *water, *as_read))

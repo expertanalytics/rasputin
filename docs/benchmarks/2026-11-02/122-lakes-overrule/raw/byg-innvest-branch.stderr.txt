@@ -1,0 +1,10 @@
+edges: 8 kept (7 cut at the domain outline), 1075 outside the domain, 0 empty
+lines: 62989 vertices read, 31785 after joining shared edges and adding crossings
+DEM: 2 files, 3314 columns x 2195 rows
+land cover: 394 triangles (0.1494 km2) in no polygon took the nearest non-water class: 89 groups, the largest 0.0162 km2 at 147408 6814789 in EPSG:25833
+land cover: 790 areas between lines; 89 in no polygon, 0 in more than one (the smallest wins), 0 too narrow to label with certainty
+125973 triangles. Every DEM node inside the mesh is within 10 m of it (largest difference 9.9976 m).
+DEM heights read as metres; the file does not say. If they are feet, give --z-unit ft or us-ft.
+real 8.20
+user 9.17
+sys 0.39

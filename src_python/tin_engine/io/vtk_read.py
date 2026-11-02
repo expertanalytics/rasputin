@@ -2,8 +2,8 @@
 
 Only rasputin's own files (second header line `rasputin mesh`), binary only:
 the dataset strings `crs` and `land_cover_codes`, the points, the triangles
-and the cell array `land_cover_code`; constraint lines and every other array
-are skipped. Pure: no path, no file.
+and the cell arrays `land_cover_code` and `land_cover_filled`; constraint
+lines and every other array are skipped. Pure: no path, no file.
 """
 
 from __future__ import annotations
@@ -21,13 +21,15 @@ _SIZE = {"double": 8, "float": 4, "int": 4, "unsigned_int": 4, "unsigned_char": 
 class MeshArrays:
     """`vertices` `(n, 3)` float64, `triangles` `(T, 3)` int64, `crs` the text written;
     `land_cover_code` `(T,)` int32, one per triangle, or None when the file has
-    none, and `land_cover_codes` the text saying what the codes are, or ""."""
+    none, `land_cover_codes` the text saying what the codes are, or "", and
+    `land_cover_filled` `(T,)` int32, 1 where a code was filled, or None."""
 
     vertices: npt.NDArray[np.float64]
     triangles: npt.NDArray[np.int64]
     crs: str
     land_cover_code: npt.NDArray[np.int32] | None = None
     land_cover_codes: str = ""
+    land_cover_filled: npt.NDArray[np.int32] | None = None
 
 
 class _Cursor:
@@ -92,7 +94,8 @@ def read_mesh(data: bytes) -> MeshArrays:
     if keyword != "POLYGONS" or flat.shape[1] != 4 or (flat[:, 0] != 3).any():
         raise ValueError("the mesh's cells are not all triangles")
     c.take(1)
-    codes, total = None, lines + len(flat)
+    arrays: dict[str, npt.NDArray[np.int32]] = {}
+    total = lines + len(flat)
     while c.at < len(c.data):
         words = c.line()
         if words[0] in ("POINT_DATA", "CELL_DATA"):
@@ -104,16 +107,19 @@ def read_mesh(data: bytes) -> MeshArrays:
             for _ in range(int(words[2])):
                 name, _, entries, kind = c.line()
                 body = c.take(int(entries) * _SIZE[kind] + 1)
-                if name != "land_cover_code":
+                if name not in ("land_cover_code", "land_cover_filled"):
                     continue
                 if kind != "int":
-                    raise ValueError(f"the mesh's land_cover_code array is {kind}, not int")
+                    raise ValueError(f"the mesh's {name} array is {kind}, not int")
                 if int(entries) != total:
-                    msg = (
-                        f"the mesh's land_cover_code array has {entries} entries for {total} cells"
-                    )
+                    msg = f"the mesh's {name} array has {entries} entries for {total} cells"
                     raise ValueError(msg)
-                codes = np.frombuffer(body[:-1], ">i4")[lines:].astype(np.int32)
+                arrays[name] = np.frombuffer(body[:-1], ">i4")[lines:].astype(np.int32)
     return MeshArrays(
-        vertices, flat[:, 1:].astype(np.int64), crs, codes, strings.get("land_cover_codes", "")
+        vertices,
+        flat[:, 1:].astype(np.int64),
+        crs,
+        arrays.get("land_cover_code"),
+        strings.get("land_cover_codes", ""),
+        arrays.get("land_cover_filled"),
     )

@@ -95,7 +95,7 @@ from cli_helpers import SQUARE, USAGE, geojson, invoke, rough_dem
 from feature_fixtures import write_geojson
 from recordread import stats_names, stats_row
 from test_cli_mesh_features import GALLERY_LINES
-from test_cli_mesh_landcover import EAST, WEST, coded, rect
+from test_cli_mesh_landcover import EAST, WEST, coded, covered, rect
 from vtkread import polygons_as_array, read_vtk
 
 REPAIR_DEFAULT = 1.0  # question 9's default, 1 m (Ola, 2026-10-08)
@@ -194,7 +194,7 @@ CORINE_ARGS = ("--land-cover-classes", "corine", "--edges", "all")
 
 
 def cover(path: Path) -> tuple[str, ...]:
-    return ("--land-cover", str(path), *CORINE_ARGS)
+    return ("--land-cover", str(covered(path)), *CORINE_ARGS)
 
 
 @pytest.fixture

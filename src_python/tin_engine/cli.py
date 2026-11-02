@@ -169,10 +169,10 @@ from tin_engine.io.station_set import read_nve_lakes, read_references, read_stat
 from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.land_cover_classes import edge_cleanup, known_codes, shipped_names
 from tin_engine.land_cover_classes import load as load_classes
-from tin_engine.land_cover_fractions import ClassRaster
+from tin_engine.land_cover_fractions import ClassRaster, merge_zero_share
 from tin_engine.land_cover_fractions import assign as assign_fractions
-from tin_engine.land_cover_map import LandCoverMap, build
-from tin_engine.landcover import label_triangles
+from tin_engine.land_cover_map import Gap, LandCoverMap, build, coverage_gap
+from tin_engine.landcover import Filled, fill_no_class, label_triangles, plan_areas, regions
 from tin_engine.legends import load_legend
 from tin_engine.legends import shipped_names as legend_names
 from tin_engine.mosaic import Seam, check_canvas
@@ -829,6 +829,14 @@ def mesh(
         str | None,
         typer.Option("--land-cover-crs", help="The --land-cover files' CRS when they do not say."),
     ] = None,
+    land_cover_partial: Annotated[
+        bool,
+        typer.Option(
+            "--land-cover-partial",
+            help="Mesh even where no land-cover file covers the domain: each gap takes the "
+            "nearest non-water class and is marked.",
+        ),
+    ] = False,
     prefer: Annotated[
         list[str] | None,
         typer.Option(
@@ -1023,6 +1031,7 @@ def mesh(
     codes: npt.NDArray[np.int32] | None = None
     codes_text = ""
     table: ClassFractions | None = None
+    marks: npt.NDArray[np.bool_] | None = None
     palette: Palette | None = None
     cover: list[tuple[int, BaseGeometry]] = []
     seams: tuple[Seam, ...] = ()
@@ -1293,7 +1302,10 @@ def mesh(
     land: _LandCover | None = None
     edge_values: dict[str, Value] = {}
     if classes is not None and classes.files:
-        land = _land_cover_map(classes, preferred, area, dem_crs, cell, clock, res.threads, known)
+        land = _land_cover_map(
+            classes, preferred, area, dem_crs, cell, clock, res.threads, known, land_cover_partial
+        )
+        edge_values |= _gap_record(land.gap, land_cover_partial)
         if len(classes.files) > 1:
             edge_values["land_cover_overlap"] = _overlap_record(land, classes.files, area)
     found_reservoirs: list[BaseGeometry] = []
@@ -1413,18 +1425,24 @@ def mesh(
         values["edges_joined"] = f"{totals} after joining shared edges and adding crossings"
     values |= edge_values
     coded = lcc if borders else None  # codes by the borders' polygons, no shares
+    # Where the borders leave a triangle 0, the map codes it, unless the
+    # borders are the whole map: there the clean-up moved them, and 0 is in no polygon.
+    rest = land.map.areas if land is not None and not choice.every_class else ()
     if coded is not None and found is not None:
         palette = coded.legend.colours
         cover = [(f.code, f.polygon) for f in found.features if f.polygon and f.code]
         if dem_run.cut is None and not computing:
-            codes, codes_text = _land_cover(dem_run.trimmed, found, coded, snap_spacing, clock)
-            values["land_cover_codes"] = codes_text
+            codes, codes_text, marks, filled = _land_cover(
+                dem_run.trimmed, found, coded, snap_spacing, clock, rest, dem_crs
+            )
+            values |= filled | {"land_cover_codes": codes_text}
             values["land_cover_shares"] = "not computed (add --shares)"
     if land is not None and preferred and dem_run.cut is None:
         values |= _prefer_record(land, preferred, dem_run.trimmed, classes)
     if classes is not None and computing:
-        table, codes, more = _class_fractions(
+        table, codes, marks, more = _class_fractions(
             classes, land, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache, res.threads,
+            land_cover_partial,
         )  # fmt: skip
         codes_text = str(more["land_cover_codes"])
         if lcc is not None:  # names and colours for the .gpkg
@@ -1462,7 +1480,7 @@ def mesh(
         folder.mkdir(exist_ok=True)
         write = functools.partial(
             _write_piece, folder, out.suffix, values, found, coded, snap_spacing, clock,
-            binary, res.threads, vocabulary,
+            binary, res.threads, vocabulary, rest,
         )  # fmt: skip
 
         def load(window: IndexWindow) -> PieceDem:
@@ -1525,7 +1543,7 @@ def mesh(
         with clock.phase("write: geopackage"):
             _write_geopackage(
                 surface, surface_mesh, codes, palette, cover, record, vocabulary, table, categories,
-                regulated, catchment_ids,
+                regulated, catchment_ids, marks,
             )  # fmt: skip
         typer.echo(f"{surface}")
     elif out.suffix == ".vtk":
@@ -1541,6 +1559,7 @@ def mesh(
                 triangle_codes=codes,
                 land_cover_codes=codes_text,
                 class_fractions=table,
+                triangle_filled=marks,
             )
         ]
     else:
@@ -1552,6 +1571,7 @@ def mesh(
                 comments=[*comments, *([f"land_cover_codes {codes_text}"] if codes_text else [])],
                 face_codes=codes,
                 face_fractions=table,
+                face_filled=marks if marks is not None and marks.any() else None,
             ),
             lambda: write_ply(
                 vertices,
@@ -1589,20 +1609,24 @@ def _write_geopackage(
     categories: Mapping[int, Category] | None = None,
     regulated: npt.NDArray[np.float64] | None = None,
     catchment_ids: npt.NDArray[np.int64] | None = None,
+    marks: npt.NDArray[np.bool_] | None = None,
 ) -> None:
     """``target`` as a GeoPackage, written as ``<target>.part``
     and renamed onto it: an existing file is replaced, never appended to, and
     a failed run leaves nothing under the asked name. Class ``fractions`` add
     their long-form table, and with ``categories`` the ``cells`` layer, its lake
     share split by ``regulated``, each triangle's share under reservoirs, and
-    each cell's ``catchment_ids`` (1 when None)."""
+    each cell's ``catchment_ids`` (1 when None); ``marks`` the triangles
+    whose class was filled."""
     srs = srs_entry(next((e.value for e in record.entries if e.name == "crs"), None))
     part = target.with_name(target.name + ".part")
     part.unlink(missing_ok=True)  # a stale .part would be appended to, not replaced
     conn = create_sqlite(part)
     try:
         create_geopackage(conn, srs)
-        write_triangles(conn, mesh.vertices, mesh.triangles, codes, palette, srs.srs_id)
+        write_triangles(
+            conn, mesh.vertices, mesh.triangles, codes, palette, srs.srs_id, filled=marks
+        )
         if len(mesh.edges):
             write_lines(conn, mesh.vertices, mesh.edges, mesh.edge_masks, vocabulary, srs.srs_id)
         if codes is not None:
@@ -2082,11 +2106,14 @@ def _class_fractions(
     out_crs: str | None,
     cache: Path | None,
     threads: int = 1,
-) -> tuple[ClassFractions, npt.NDArray[np.int32], dict[str, Value]]:
+    partial: bool = False,
+) -> tuple[ClassFractions, npt.NDArray[np.int32], npt.NDArray[np.bool_], dict[str, Value]]:
     """The exact class fractions from the cached year, the class raster file
     or the map of class polygons (``land``), timed as the phase ``land cover
-    fractions``; the table, the codes and the record entries. An object the
-    cache lacks is refused naming the ``fetch`` that gets it."""
+    fractions``; the table, the codes with none 0, where they were filled or
+    a 0 share moved, and the record entries. An object the cache lacks is
+    refused naming the ``fetch`` that gets it; a raster's no data inside the
+    domain is refused unless ``partial``."""
     source, year = classes.source, classes.year
     repository: ClassRaster | None = None
     values: dict[str, Value] = {}
@@ -2148,8 +2175,29 @@ def _class_fractions(
         f"{assigned.table.triangles} triangles, {len(np.unique(assigned.table.classes))} classes",
         err=True,
     )
+    xy = np.asarray(trimmed.vertices, dtype=np.float64)[:, :2]
+    tri = np.asarray(trimmed.triangles, dtype=np.int64).reshape(-1, 3)
+    table = assigned.table
+    rows = np.repeat(
+        np.arange(table.triangles), table.offsets[1:].astype(np.int64) - table.offsets[:-1]
+    )
+    zero = np.zeros(table.triangles)
+    np.add.at(zero, rows, np.where(table.classes == 0, table.fractions, 0.0))
+    lost = plan_areas(xy, tri) * zero  # each triangle's area in no class, m2
+    if repository is not None:  # a raster's no data in the domain is a gap
+        gap = _share_gap(tri, xy, lost)
+        values |= _gap_record(gap, partial)
+        _said_gap(gap, partial, dem_crs)
+    water = classes.classes.water_codes if classes.classes is not None else frozenset[int]()
+    codes, marks, more = _fill(xy, tri, assigned.codes, water, dem_crs, lost)
+    values |= more
+    if (zero > 0).any():
+        into, wet = codes, (zero > 0) & np.isin(codes, list(water))
+        if wet.any() and not wet.all():  # all wet: each 0 share joins its own water code
+            into = fill_no_class(xy, tri, codes, water=water, asking=wet).codes
+        table = merge_zero_share(table, into)
     values |= {
-        "land_cover_codes": f"{label} class number; 0 = no data, and every constraint line",
+        "land_cover_codes": f"{label} class number; 0 = every constraint line; no triangle",
         "land_cover_source": label if year is None else f"{label}, {year}",
     }
     if repository is None:
@@ -2166,7 +2214,148 @@ def _class_fractions(
             "land_cover_licence_note": escaped_ascii(source.licence_note),
             "land_cover_cite": escaped_ascii("; ".join(source.cite)) or None,
         }
-    return assigned.table, assigned.codes, values
+    return table, codes, marks, values
+
+
+def _fill(
+    xy: npt.NDArray[np.float64],
+    tri: npt.NDArray[np.int64],
+    codes: npt.NDArray[np.int32],
+    water: frozenset[int],
+    crs: str,
+    lost: npt.NDArray[np.float64] | None = None,
+) -> tuple[npt.NDArray[np.int32], npt.NDArray[np.bool_], dict[str, Value]]:
+    """`fill_no_class` on the mesh, its refusal a ``--land-cover`` usage
+    error, and one stderr line when any triangle is marked: filled, or one
+    whose ``lost`` area (m2 in no class) moves. The codes, the marks and the
+    record entries."""
+    try:
+        done: Filled = fill_no_class(xy, tri, codes, water=water)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
+    marks = done.filled if lost is None else done.filled | (lost > 0)
+    m2 = 0.0
+    if marks.any():
+        m2 = float(plan_areas(xy, tri[done.filled]).sum())
+        m2 += 0.0 if lost is None else float(lost[marks & ~done.filled].sum())
+        area, x, y = done.largest
+        where = f" at {x:.0f} {y:.0f} in {crs_label(crs)}"
+        groups = f": {plural(done.groups, 'group', 'groups')}, the largest {area / 1e6:.4f} km2"
+        typer.echo(
+            f"land cover: {plural(int(marks.sum()), 'triangle', 'triangles')} "
+            f"({m2 / 1e6:.4f} km2) in no polygon took the nearest non-water class"
+            + (groups + where if done.groups else ""),
+            err=True,
+        )
+    said = f"{m2:.1f}"
+    return done.codes, marks, {"land_cover_filled": int(marks.sum()), "land_cover_filled_m2": said}
+
+
+def _share_gap(
+    tri: npt.NDArray[np.int64], xy: npt.NDArray[np.float64], lost: npt.NDArray[np.float64]
+) -> Gap:
+    """The raster's gap: each group of triangles with area in no class
+    (``lost``, m2) connected through shared edges, as (its lost area, the
+    centroid of its largest triangle)."""
+    held = np.flatnonzero(lost > 0)
+    if not len(held):
+        return Gap((), 0.0)
+    group = held[regions(tri[held], np.zeros((0, 2), np.int64))]
+    size = plan_areas(xy, tri)
+    parts = []
+    for g in np.unique(group):
+        members = held[group == g]
+        x, y = xy[tri[members[np.argmax(size[members])]]].mean(axis=0)
+        parts.append((float(lost[members].sum()), float(x), float(y)))
+    parts.sort(key=lambda p: (-p[0], p[1], p[2]))
+    return Gap(tuple(parts), float(sum(a for a, _, _ in parts)))
+
+
+def _gap_record(gap: Gap, partial: bool) -> dict[str, Value]:
+    return {
+        "land_cover_partial": "on" if partial else "off",
+        "land_cover_gap_m2": f"{gap.area:.1f}",
+        "land_cover_gaps": len(gap.parts),
+    }
+
+
+def _said_gap(
+    gap: Gap, partial: bool, crs: str, hints: Callable[[], list[list[str]]] | None = None
+) -> None:
+    """Nothing for no gap; the refusal of a gap without ``partial``, each part
+    a line with the catalogue ids ``hints`` finds covering it; with it, one
+    stderr line."""
+    if not gap.parts:
+        return
+    label, (a, x, y) = crs_label(crs), gap.parts[0]
+    counted = plural(len(gap.parts), "part", "parts")
+    if partial:
+        typer.echo(
+            f"land cover: {gap.area / 1e6:.4f} km2 of the domain in no file ({counted}, the "
+            f"largest {a / 1e6:.4f} km2 around {x:.0f} {y:.0f} in {label}), filled by "
+            "--land-cover-partial",
+            err=True,
+        )
+        return
+    found = hints() if hints is not None else []
+    lines = [
+        f"the land cover leaves {gap.area / 1e6:.4f} km2 of the domain in no polygon of any "
+        f"--land-cover or --prefer file ({counted}); missing land cover is refused. Add the "
+        "file that covers it, or pass --land-cover-partial to fill each gap from the nearest "
+        "non-water class and mark it:"
+    ]
+    for i, (a, x, y) in enumerate(gap.parts):
+        ids = found[i] if i < len(found) else []
+        by = f"; covered by {', '.join(ids)}" if ids else ""
+        lines.append(f"  {a / 1e6:.4f} km2 around {x:.0f} {y:.0f} in {label}{by}")
+    raise typer.BadParameter("\n".join(lines), param_hint="--land-cover")
+
+
+def _covering(
+    gap: Gap,
+    classes: _ClassSource,
+    known: Mapping[str, RemoteSource],
+    dem_crs: str,
+    cell: float,
+) -> list[list[str]]:
+    """Per part of ``gap``, the local catalogue entries of the run's shipped
+    class file, not among its ``--land-cover`` ids, with a polygon covering
+    the part's centre; of an id and its clean copy for the DEM's CRS, only the
+    copy. A candidate that fails to read is skipped: the hint is help, not a
+    check."""
+    lcc = classes.classes
+    if lcc is None or lcc.name not in shipped_names():
+        return []
+    used = {f.source.id for f in classes.files if f.source is not None}
+    label = crs_label(dem_crs)
+    ids = [
+        k
+        for k, s in known.items()
+        if s.values == "features" and s.path is not None and s.classes == lcc.name
+        and k not in used and clean_sibling(k, label, known) is None
+    ]  # fmt: skip
+    centres = shapely.points([(x, y) for _, x, y in gap.parts])
+    x0, y0, x1, y1 = shapely.total_bounds(centres)
+    near = DomainPolygon(polygon=shapely.box(x0 - 1, y0 - 1, x1 + 1, y1 + 1), crs=dem_crs)
+    named: list[list[str]] = [[] for _ in gap.parts]
+    for k in ids:
+        source = known[k]
+        assert source.path is not None
+        try:
+            read = read_class_polygons(
+                source.path, source.layer, lcc, dem_crs,
+                lambda own: source_region(near, dem_crs, own, cell=cell).bounds,
+                near=near.polygon.bounds,
+            )  # fmt: skip
+        except (FeatureError, OSError, ValueError):
+            continue
+        shapes = np.array([g for _, g in read.areas], dtype=object)
+        if not len(shapes):
+            continue
+        hit = np.unique(shapely.STRtree(shapes).query(centres, predicate="intersects")[0])
+        for i in hit:
+            named[int(i)].append(k)
+    return named
 
 
 def _credits(source: RemoteSource, path: Path) -> tuple[str, str, str]:
@@ -2240,11 +2429,13 @@ def _fetched(source: RemoteSource | None, path: Path) -> tuple[str, datetime.dat
 @dataclass(frozen=True, slots=True)
 class _LandCover:
     """The map of class polygons, the map before ``--prefer`` (the same
-    without it), and what each ``--land-cover`` file read."""
+    without it), what each ``--land-cover`` file read, and the part of the
+    domain no file covers."""
 
     map: LandCoverMap
     base: LandCoverMap
     reads: tuple[ClassPolygons, ...]
+    gap: Gap
 
 
 def _land_cover_map(
@@ -2256,10 +2447,12 @@ def _land_cover_map(
     clock: PhaseClock,
     threads: int,
     known: Mapping[str, RemoteSource],
+    partial: bool = False,
 ) -> _LandCover:
     """The --land-cover files read near ``area`` and joined, cut by the
     --prefer sources: the phase ``land cover read``. An invalid polygon is
-    refused naming its clean copy in ``known``, if any (:func:`_invalid`)."""
+    refused naming its clean copy in ``known``, if any (:func:`_invalid`);
+    a part of ``area`` in no polygon read, unless ``partial``."""
     assert classes.classes is not None
     region = source_region(area, dem_crs, dem_crs, cell=cell)
     x0, y0, x1, y1 = region.bounds
@@ -2311,12 +2504,15 @@ def _land_cover_map(
             raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
         again = functools.partial(build, cut=False, outside=base.outside)
         built = again([base.areas], chosen, classes.classes, region) if chosen else base
+        covers = [g for _, g in base.areas] + [g for _, polygons in chosen for g in polygons]
+        gap = coverage_gap(area.polygon, covers, threads=threads)
+    _said_gap(gap, partial, dem_crs, lambda: _covering(gap, classes, known, dem_crs, cell))
     for r in reads:
         if r.scanned:
             typer.echo(
                 f"{r.layer}: this layer has no spatial index, so every row was read", err=True
             )
-    return _LandCover(built, base, tuple(reads))
+    return _LandCover(built, base, tuple(reads), gap)
 
 
 def _read_lines(
@@ -2522,6 +2718,7 @@ def _write_piece(
     binary: bool,
     threads: int,
     vocabulary: EdgeVocabulary,
+    areas: Sequence[tuple[int, BaseGeometry]],
     piece: Piece,
 ) -> PieceEntry:
     """``piece``, if it has triangles, as its own ``suffix`` file in ``where``,
@@ -2531,9 +2728,12 @@ def _write_piece(
     file, digest, made = None, None, piece.trimmed
     if len(made.triangles):
         codes, codes_text, figures = None, "", dict(values) | dict(piece.values)
+        marks = None
         if coded is not None and found is not None:
-            codes, codes_text = _land_cover(made, found, coded, spacing, clock)
-            figures["land_cover_codes"] = codes_text
+            codes, codes_text, marks, filled = _land_cover(
+                made, found, coded, spacing, clock, areas, str(values["crs"])
+            )
+            figures |= filled | {"land_cover_codes": codes_text}
         told = refined_record(triangles=len(made.triangles), threads=threads, **figures)
         typer.echo(f"piece {'-'.join(map(str, piece.id))}: {summary(told)}", err=True)
         if suffix == ".vtk":
@@ -2541,13 +2741,14 @@ def _write_piece(
                 made.vertices, triangles=made.triangles, edges=made.edges,
                 edge_masks=made.edge_masks, vocabulary=_piece_vocabulary(vocabulary),
                 fields=file_fields(told), binary=binary, triangle_codes=codes,
-                land_cover_codes=codes_text,
+                land_cover_codes=codes_text, triangle_filled=marks,
             )  # fmt: skip
         else:
             coded_text = [f"land_cover_codes {codes_text}"] if codes_text else []
             data = write_ply(
                 made.vertices, faces=made.triangles, ascii=not binary,
                 comments=[*field_comments(file_fields(told)), *coded_text], face_codes=codes,
+                face_filled=marks if marks is not None and marks.any() else None,
             )  # fmt: skip
         file = "-".join(map(str, piece.id)) + suffix
         digest = hashlib.sha256(data).hexdigest()
@@ -2559,18 +2760,31 @@ def _write_piece(
 
 
 def _land_cover(
-    trimmed: Trimmed, found: FeatureSet, rules: LandCoverClasses, spacing: float, clock: PhaseClock
-) -> tuple[npt.NDArray[np.int32], str]:
-    """A code per triangle from the coded polygons, timed as the phase
-    ``land cover``, with its stderr line; the codes and their text."""
+    trimmed: Trimmed,
+    found: FeatureSet,
+    rules: LandCoverClasses,
+    spacing: float,
+    clock: PhaseClock,
+    areas: Sequence[tuple[int, BaseGeometry]],
+    crs: str,
+) -> tuple[npt.NDArray[np.int32], str, npt.NDArray[np.bool_], dict[str, Value]]:
+    """A code per triangle from the coded polygons, a triangle they leave 0
+    coded from the map's ``areas``, then one in no polygon of the map filled
+    (`_fill`), timed as the phase ``land cover``, with its stderr lines; the
+    codes, their text, the marks and the record entries."""
     polygons = [(f.polygon, f.code) for f in found.features if f.polygon is not None and f.code]
     with clock.phase("land cover"):
         mesh = (trimmed.vertices, trimmed.triangles, trimmed.edges)
-        labels = label_triangles(*mesh, polygons=polygons, margin=2 * spacing)
+        rest = [(g, c) for c, g in areas]
+        labels = label_triangles(*mesh, polygons=polygons, margin=2 * spacing, rest=rest)
+        xy = np.asarray(trimmed.vertices, dtype=np.float64)[:, :2]
+        tri = np.asarray(trimmed.triangles, dtype=np.int64).reshape(-1, 3)
+        codes, marks, filled = _fill(xy, tri, labels.codes, rules.water_codes, crs)
+    mapped = f", {labels.rest} coded from the map outside the borders" if labels.rest else ""
     typer.echo(
         f"land cover: {labels.regions} areas between lines; {labels.outside} in no polygon, "
         f"{labels.overlapped} in more than one (the smallest wins), "
-        f"{labels.thin} too narrow to label with certainty",
+        f"{labels.thin} too narrow to label with certainty{mapped}",
         err=True,
     )
     splits = "".join(
@@ -2579,7 +2793,7 @@ def _land_cover(
         for s in rules.splits
     )
     text = f"{rules.codes}, attribute {rules.attribute}{splits}, legend {rules.name}; "
-    return labels.codes, text + "0 = in no polygon, and every constraint line"
+    return codes, text + "0 = every constraint line; no triangle", marks, filled
 
 
 def palette(

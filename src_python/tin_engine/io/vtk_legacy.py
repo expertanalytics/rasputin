@@ -79,6 +79,7 @@ def write_vtk(
     triangle_codes: npt.ArrayLike | None = None,
     land_cover_codes: str = "",
     class_fractions: ClassFractions | None = None,
+    triangle_filled: npt.ArrayLike | None = None,
 ) -> bytes:
     """Encode one mesh and its constraint edges as legacy VTK 4.2 PolyData.
 
@@ -98,6 +99,9 @@ def write_vtk(
             written as the dataset arrays `land_cover_offsets`
             (`unsigned_int`), `land_cover_classes` (`int`) and
             `land_cover_fractions` (`float`).
+        triangle_filled: `(T,)` true where a code was filled, written with
+            `triangle_codes` as the `int` cell array `land_cover_filled`, 0 on
+            every line.
 
     Raises:
         ValueError: if `vertices` is not `(N, 3)`; if `edge_masks` does not
@@ -162,6 +166,10 @@ def write_vtk(
         # Every cell array covers every cell; the lines get 0.
         cell_codes = np.concatenate([np.zeros(len(lines), dtype=np.int64), codes])
         features.append(_numeric(LAND_COVER_CODE, cell_codes, "int", binary))
+    if codes is not None and triangle_filled is not None:
+        marks = np.zeros(len(lines) + len(polygons), dtype=np.int64)
+        marks[len(lines) :] = np.asarray(triangle_filled).reshape(-1)
+        features.append(_numeric("land_cover_filled", marks, "int", binary))
 
     out = [
         b"# vtk DataFile Version 4.2\nrasputin mesh\n",

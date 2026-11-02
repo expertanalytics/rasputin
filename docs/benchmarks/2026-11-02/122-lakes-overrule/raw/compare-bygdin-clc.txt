@@ -1,0 +1,7 @@
+vertices master 30367 branch 30367; triangles master 59623 branch 59623
+vertex set equal: True ; same order: True
+triangle set equal (corners sorted): True
+master code 0: 0; branch code 0: 0
+codes differ: 2; where master != 0: 2
+branch marked filled: 145; differ outside marked: 0; marked with master 0: 0; marked with a different nonzero master code: 2
+marked and changed, (master, branch): count {(322, 333): 2}

@@ -35,6 +35,62 @@ from tin_engine.preferred import BAND, Replaced, replace
 
 Pairs = Sequence[tuple[int, BaseGeometry]]
 
+#: A gap part whose largest inscribed circle has at most this radius is
+#: overlay rounding, not missing data (chosen: 200 times the widest such noise
+#: measured where files share borders, far below a real gap's width; assumes
+#: projected metres).
+GAP_NOISE = 0.01
+#: The side of the square tiles the gap is computed in (chosen; projected metres).
+GAP_TILE = 5000.0
+
+
+@dataclass(frozen=True)
+class Gap:
+    """The uncovered parts as (area, x, y), area descending, x, y the centre of
+    the part's largest inscribed circle; and their summed area."""
+
+    parts: tuple[tuple[float, float, float], ...]
+    area: float
+
+
+def coverage_gap(domain: Polygon, covers: Sequence[BaseGeometry], *, threads: int = 1) -> Gap:
+    """The parts of ``domain`` in no polygon of ``covers``, wider than
+    `GAP_NOISE`, in the domain's own plane. Computed per tile of `GAP_TILE`
+    in ``threads`` threads and merged across the tile borders; no geometry
+    shared among the threads is prepared."""
+    x0, y0, x1, y1 = domain.bounds
+    gx, gy = (
+        a.ravel()
+        for a in np.meshgrid(
+            np.arange(x0, x1, GAP_TILE), np.arange(y0, y1, GAP_TILE), indexing="ij"
+        )
+    )
+    tiles = shapely.box(gx, gy, np.minimum(gx + GAP_TILE, x1), np.minimum(gy + GAP_TILE, y1))
+    shapes = np.array(list(covers), dtype=object)
+    hits: list[list[int]] = [[] for _ in range(len(tiles))]
+    if len(shapes):
+        for t, c in zip(*shapely.STRtree(shapes).query(tiles), strict=True):
+            hits[int(t)].append(int(c))
+
+    def uncovered(t: int) -> BaseGeometry:
+        part = shapely.intersection(domain, tiles[t])
+        if hits[t] and not part.is_empty:  # no union of covers outside the domain
+            near = shapely.intersection(shapes[sorted(hits[t])], tiles[t])
+            part = shapely.difference(part, shapely.union_all(near))
+        return part
+
+    with ThreadPoolExecutor(max(threads, 1)) as pool:
+        pieces = list(pool.map(uncovered, range(len(tiles))))
+    merged = _polygonal(shapely.union_all(pieces))
+    found = []
+    for part in shapely.get_parts(merged) if merged is not None else ():
+        circle = shapely.maximum_inscribed_circle(part, GAP_NOISE / 10)
+        if circle.length > GAP_NOISE:
+            x, y = circle.coords[0]
+            found.append((float(part.area), float(x), float(y)))
+    parts = tuple(sorted(found, key=lambda p: (-p[0], p[1], p[2])))
+    return Gap(parts, float(sum(a for a, _, _ in parts)))
+
 
 @dataclass(frozen=True)
 class LandCoverMap:
@@ -75,7 +131,7 @@ def build(
     far = (*outside, *(pair for _, out in fixed for pair in out))
     if not preferred:
         return LandCoverMap(tuple(areas), far, classes, None, tuple(overlap))
-    done = replace(areas, preferred, [region])
+    done = replace(areas, preferred, [region], water=classes.water_codes)
     return LandCoverMap(tuple(_refilled_joined(done)), far, classes, done, tuple(overlap))
 
 

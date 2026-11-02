@@ -67,6 +67,7 @@ def write_ply(
     vocabulary: EdgeVocabulary | None = None,
     face_codes: npt.ArrayLike | None = None,
     face_fractions: ClassFractions | None = None,
+    face_filled: npt.ArrayLike | None = None,
 ) -> bytes:
     """Encode one mesh as a PLY file.
 
@@ -83,6 +84,8 @@ def write_ply(
         face_codes: `(T,)` land-cover codes, written as the face property
             `int land_cover_code` after `vertex_indices`.
             The comment naming the code system is the caller's, in `comments`.
+        face_filled: `(T,)` true where a code was filled, written with
+            `face_codes` as the face property `uchar land_cover_filled`.
         face_fractions: the sparse table of class fractions per face, written
             as the face lists `land_cover_classes` (`list
             uchar int`) and `land_cover_fractions` (`list uchar float`)
@@ -131,8 +134,11 @@ def write_ply(
     blocks = [(_vertex_declaration(len(points)), _vertex_body(points, ascii))]
     if faces is not None:
         blocks.append(
-            _face_block(np.ascontiguousarray(faces, dtype="<u4"), face_codes, face_fractions, ascii)
-        )
+            _face_block(
+                np.ascontiguousarray(faces, dtype="<u4"), face_codes, face_fractions, ascii,
+                face_filled,
+            )
+        )  # fmt: skip
     if edges is not None:
         blocks.append(_edge_block(np.ascontiguousarray(edges, dtype="<u4"), edge_properties, ascii))
 
@@ -167,9 +173,10 @@ def _face_block(
     codes: npt.ArrayLike | None,
     fractions: ClassFractions | None,
     ascii: bool,
+    filled: npt.ArrayLike | None = None,
 ) -> tuple[list[str], bytes]:
     """The 2D mesh's block: one variable-length index list per triangle, then
-    optionally its class and fraction lists and its land-cover code."""
+    optionally its class and fraction lists, its land-cover code and mark."""
     faces = faces.reshape(-1, 3)
     declaration = [
         f"element face {len(faces)}",
@@ -186,6 +193,7 @@ def _face_block(
             "property list uchar int land_cover_classes",
             "property list uchar float land_cover_fractions",
         ]
+    marks = None
     if codes is not None:
         values = np.asarray(codes).reshape(-1)
         if len(values) != len(faces):
@@ -194,8 +202,13 @@ def _face_block(
         declaration.append("property int land_cover_code")
         columns.append(values)
         layout.append(("c", "<i4"))
+        if filled is not None:
+            marks = np.asarray(filled).reshape(-1).astype(np.uint8)
+            declaration.append("property uchar land_cover_filled")
+            columns.append(marks)
+            layout.append(("f", "u1"))
     if fractions is not None:
-        return declaration, _face_lists(faces, codes, fractions, ascii)
+        return declaration, _face_lists(faces, codes, fractions, ascii, marks)
     if ascii:
         table = np.column_stack(columns).astype(np.int64)
         return declaration, _lines(" ".join(map(str, row)) for row in table.tolist())
@@ -206,7 +219,11 @@ def _face_block(
 
 
 def _face_lists(
-    faces: npt.NDArray[np.uint32], codes: npt.ArrayLike | None, table: ClassFractions, ascii: bool
+    faces: npt.NDArray[np.uint32],
+    codes: npt.ArrayLike | None,
+    table: ClassFractions,
+    ascii: bool,
+    marks: npt.NDArray[np.uint8] | None,
 ) -> bytes:
     """The face records with their class and fraction lists: variable length,
     so the binary body is assembled by offset rather than as fixed records."""
@@ -220,9 +237,20 @@ def _face_lists(
         for t, (a, b) in enumerate(pairwise(offsets)):
             words = [3, *faces[t], counts[t], *table.classes[a:b], counts[t]]
             words += [repr(float(f)) for f in table.fractions[a:b]]
-            rows.append(" ".join(map(str, words)) + ("" if code is None else f" {code[t]}"))
+            rows.append(
+                " ".join(
+                    map(
+                        str,
+                        [
+                            *words,
+                            *([] if code is None else [code[t]]),
+                            *([] if marks is None else [marks[t]]),
+                        ],
+                    )
+                )
+            )
         return _lines(rows)
-    tail = 0 if code is None else 4
+    tail = (0 if code is None else 4) + (0 if marks is None else 1)
     length = 15 + 8 * counts + tail
     start = np.concatenate([[0], np.cumsum(length)[:-1]])
     out = np.zeros(int(length.sum()), dtype=np.uint8)
@@ -238,6 +266,8 @@ def _face_lists(
     if code is not None:
         at = start + 15 + 8 * counts
         out[at[:, None] + np.arange(4)] = code.astype("<i4").view(np.uint8).reshape(-1, 4)
+    if marks is not None:
+        out[start + 15 + 8 * counts + 4] = marks
     return out.tobytes()
 
 

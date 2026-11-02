@@ -1,0 +1,7 @@
+scripts/gap_place_probe.py, Bygdin with ar50-innlandet-clean-25833 --prefer lake= NVE, branch 221e2cf7
+untiled parts 5 areas [5819919, 1992860, 43928, 6161, 570] sum 7863437.2
+untiled, tolerance 0.001: centre 136214.23 6830715.43 radius 591.364
+untiled, tolerance None: centre 136215.64 6830714.29 radius 589.716
+code's parts: [(5819919, 136214.23, 6830715.43), (1992860, 141915.62, 6830808.53), (43928, 140730.35, 6829429.25), (6161, 138235.57, 6830375.69), (570, 138287.73, 6830381.07)] sum 7863437.2
+distance to the gap's edge from 136216.00 6830714.00: 589.294
+distance to the gap's edge from 136214.23 6830715.43: 591.364

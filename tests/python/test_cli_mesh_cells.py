@@ -43,9 +43,10 @@ from vtkread import read_vtk
 
 #: Section 3: at most 44 classes of float32 rounding (6e-8 each) per row.
 FIVE_SUM = 3e-6
-#: Measured at `074e6322` (section 6, T5).
-TRIANGLES, ENTRIES, AREA_M2 = 1590, 1825, 4_490_161
-SCENE_CLASSES = {0, 9, 15, 21, 25, 30, 41, 75}
+#: Measured at `074e6322` (section 6, T5); ENTRIES on the class raster
+#: without its no-data block (`write_class_cache`), measured on master's code.
+TRIANGLES, ENTRIES, AREA_M2 = 1590, 1875, 4_490_161
+SCENE_CLASSES = {3, 9, 11, 15, 21, 25, 30, 41, 48, 75}
 SHARES = ("glacier", "lake", "reservoir", "forest", "unspecified")
 
 
@@ -149,7 +150,7 @@ def test_t5_geometry_columns_match_the_triangles(mapbiomas: sqlite3.Connection) 
 
 
 def test_t5_shares_from_the_long_form_table(mapbiomas: sqlite3.Connection) -> None:
-    assert_allclose(column(mapbiomas, "cells", "forest"), shares_of(mapbiomas, {9}), atol=1e-12)
+    assert_allclose(column(mapbiomas, "cells", "forest"), shares_of(mapbiomas, {3, 9}), atol=1e-12)
     for name in ("lake", "glacier", "savanna", "reservoir"):
         assert not column(mapbiomas, "cells", name).any(), name
     check_sums(mapbiomas)

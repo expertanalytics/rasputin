@@ -94,7 +94,7 @@ def offline(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def scene(tmp_path: Path) -> dict[str, Path]:
     lc = tmp_path / FILE_NAME
-    lc.write_bytes(class_tiff(2025))
+    lc.write_bytes(class_tiff(2025, no_data=False))
     return {
         "cache": write_class_cache(tmp_path / "cache"),
         "dem": write_dem(tmp_path / "dem.tif"),
@@ -154,7 +154,11 @@ class TestByPath:
         triangles = np.array([np.asarray(p) for p in got.polygons], dtype=np.int64)
         rows = rows_of(offsets, held, fractions.astype(np.float32))
         assert (
-            same_rows(rows, oracle_fractions(got.points, triangles, class_grid(2025)), FRACTION)
+            same_rows(
+                rows,
+                oracle_fractions(got.points, triangles, class_grid(2025, no_data=False)),
+                FRACTION,
+            )
             == []
         )
         assert file_field(got, "land_cover_source") == FILE_NAME
@@ -169,7 +173,7 @@ class TestByPath:
         vtk = read_vtk(target.read_bytes())
         assert file_field(vtk, "land_cover_source") == FILE_NAME
         assert file_field(vtk, "land_cover_codes") == (
-            f"{FILE_NAME} class number; 0 = no data, and every constraint line"
+            f"{FILE_NAME} class number; 0 = every constraint line; no triangle"
         )
 
     def test_a_land_cover_map_names_and_colours_the_gpkg(

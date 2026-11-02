@@ -34,7 +34,7 @@ from shapely.geometry import box
 from shapely.geometry.base import BaseGeometry
 
 from fraction_fixtures import dem_origin
-from test_cli_land_cover_polygons import cover_polygons
+from test_cli_land_cover_polygons import cover_polygons, partial_cover
 from test_cli_mesh_prefer import preferred_lake
 
 #: On an area of the scene, m²: the design's figures are to 1 m².
@@ -76,7 +76,9 @@ def planted_box() -> BaseGeometry:
 
 
 def test_1_the_scenes_map(lcm: Any, corine: Any) -> None:
-    built = lcm.build([cover_polygons()], [(LAKE, [preferred_lake()])], corine, everywhere())
+    """On the scene's three classes (`partial_cover()`): the heath that
+    `cover_polygons()` adds would join the map's codes."""
+    built = lcm.build([partial_cover()], [(LAKE, [preferred_lake()])], corine, everywhere())
     found = by_code(built.areas)
     assert set(found) == {311, 312, 512}, found
     for code, area in ((311, 1_409_620.0), (312, 509_495.0), (512, 420_090.0)):
@@ -142,13 +144,14 @@ def test_10_polygons_that_only_touch_are_both_kept(lcm: Any, corine: Any) -> Non
     assert by_code(built.areas) == pytest.approx({311: 5000.0, ARABLE: 5000.0}, abs=EPS)
 
 
-def test_a_map_cut_by_prefer_covers_the_region_once(lcm: Any, corine: Any) -> None:
+def test_a_map_cut_by_prefer_covers_the_region_once_less_the_island(lcm: Any, corine: Any) -> None:
     """Bygdin, 2026-10-29: islands in a preferred lake, where the base had
-    water, were left with no class. The base covers the region: heath less a
-    lake [20,80]². The preferred lake [25,75]² has two islands as holes, one
-    in the base's water, one across its shore ([10,30] x [60,70], partly
-    heath). After the cut, the map's areas cover the region once: they sum
-    to its area and to their union's."""
+    water. The base covers the region: heath less a lake [20,80]². The
+    preferred lake [25,75]² has two islands as holes, one in the base's water
+    ([40,50]², 100 m²), one across its shore ([10,30] x [60,70], partly
+    heath). After the cut (`docs/increments/122-lakes-overrule.md`, test 8),
+    the island in the water is left out, for the mesh fill: the map's areas
+    cover the region once less those 100 m², summing to their union's."""
     region = box(0, 0, 100, 100)
     water = box(20, 20, 80, 80)
     base = [[(HEATH, box(-200, -200, 300, 300).difference(water)), (LAKE, water)]]
@@ -156,5 +159,20 @@ def test_a_map_cut_by_prefer_covers_the_region_once(lcm: Any, corine: Any) -> No
     preferred = box(25, 25, 75, 75).difference(shapely.union_all(islands))
     built = lcm.build(base, [(LAKE, [preferred])], corine, region)
     inside = [g.intersection(region) for _, g in built.areas]
-    assert sum(g.area for g in inside) == pytest.approx(region.area, abs=EPS)
-    assert shapely.union_all(inside).area == pytest.approx(region.area, abs=EPS)
+    assert sum(g.area for g in inside) == pytest.approx(region.area - 100.0, abs=EPS)
+    assert shapely.union_all(inside).area == pytest.approx(region.area - 100.0, abs=EPS)
+    assert shapely.union_all(inside).intersection(islands[0]).area == pytest.approx(0.0, abs=EPS)
+
+
+def test_build_passes_the_class_files_water_to_replace(lcm: Any, corine: Any) -> None:
+    """122, section 3.1: `build` gives `replace` the class file's water
+    codes. Heath [0,100]² less lake [20,80]² and river 511 [80,90] x [10,90];
+    the preferred lake [20,78] x [20,80] leaves [78,80] x [20,80], 60 m on
+    the river and 4 m on heath: it joins heath, not the river."""
+    lake, river = box(20, 20, 80, 80), box(80, 10, 90, 90)
+    heath = box(0, 0, 100, 100).difference(lake).difference(river)
+    base = [[(HEATH, heath), (LAKE, lake), (511, river)]]
+    built = lcm.build(base, [(LAKE, [box(20, 20, 78, 80)])], corine, box(0, 0, 100, 100))
+    found = by_code(built.areas)
+    assert found[511] == pytest.approx(800.0, abs=EPS), found
+    assert found[HEATH] == pytest.approx(5720.0, abs=EPS), found

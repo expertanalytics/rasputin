@@ -67,7 +67,7 @@ import tin_engine.run_record as rr
 from cli_helpers import SQUARE, geojson, invoke, rough_dem
 from feature_fixtures import Feat, domain_of, write_geojson
 from legend_fixtures import coded_map, write
-from test_cli_mesh_landcover import EAST, WEST, coded, rel
+from test_cli_mesh_landcover import EAST, WEST, coded, covered, rel
 
 SIDE = 1000.0
 DOMAIN = box(0, 0, SIDE, SIDE)
@@ -339,7 +339,7 @@ class TestTheRecord:
         record, _ = mesh(
             tmp_path,
             *("--dem", str(bumpy), "--domain", str(square)),
-            *("--land-cover", str(corine), "--land-cover-classes", "corine"),
+            *("--land-cover", str(covered(corine)), "--land-cover-classes", "corine"),
             *("--lines", f"river={small_river}", "--edges", "all"),
         )
         (found,) = spy.sets
@@ -349,7 +349,7 @@ class TestTheRecord:
         assert own[0] != own[1]  # the premise: the two sources differ
         for entry, counts in zip(entries, own, strict=True):
             assert entry.endswith(f": {counts}") or entry.endswith(f", {counts}"), entry
-        assert entries[0].startswith("corine.geojson, classes corine: 2 features, ")
+        assert entries[0].startswith("corine.geojson, classes corine: 3 features, ")
         assert entries[1].startswith("river.geojson, lines river: 1 feature, ")
         assert JOINED.match(record["edges_joined"]), record["edges_joined"]
         assert "edges_joined" in rr.WORDING

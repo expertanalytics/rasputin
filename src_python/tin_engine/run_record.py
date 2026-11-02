@@ -44,6 +44,7 @@ WORDING = {
     "land_cover_overlap": (
         "Area inside the domain where land-cover files overlap, and the file that kept it"
     ),
+    "land_cover_partial": "Parts of the domain no land-cover file covers filled from a neighbour",
     "edges_repair_m": "Land-cover borders closer than this made one, narrower gaps filled",
     "edges_merge_same_class": "Borders between land-cover polygons of one class dropped",
     "edges_max_shift_m": (
@@ -91,6 +92,10 @@ WORDING = {
     "land_cover_licence": "Licence of the land-cover data",
     "land_cover_codes": "What land_cover_code holds",
     "land_cover_shares": "Class shares per triangle",
+    "land_cover_gaps": "Parts of the domain in no land-cover polygon",
+    "land_cover_gap_m2": "Their area, m2",
+    "land_cover_filled": "Triangles in no land-cover polygon given the nearest non-water class",
+    "land_cover_filled_m2": "Their area, with the shares in no polygon moved, m2",
     "cells": "The cells layer",
     "reservoirs": "Reservoir polygons splitting the cells' lake share",
     "land_cover_prefer": (

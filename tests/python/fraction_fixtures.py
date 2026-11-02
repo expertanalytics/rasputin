@@ -46,8 +46,9 @@ PINNED BY THESE SUITES (the design names the parts, not their spelling):
   (exit 2) naming the option; an object not in the cache is refused naming
   the key and `fetch`, with no traceback; an unknown key and a run with
   neither `--cache` nor `RASPUTIN_DATA` are usage errors too. The file's
-  strings: `land_cover_codes` is `<source id> class number; 0 = no data, and
-  every constraint line` and `land_cover_source` is `<source id>, <year>`
+  strings: `land_cover_codes` is `<source id> class number; 0 = every
+  constraint line; no triangle` (increment 122, section 3.4) and
+  `land_cover_source` is `<source id>, <year>`
   (1.6 spells both with a display name `RemoteSource` does not have; the id
   is the name `--land-cover` and `fetch` take), `land_cover_credit` the
   source's credit rendered with the fetch date and the URL,
@@ -263,12 +264,15 @@ def write_domain(path: Path) -> Path:
     return geojson(path, domain_ring(), crs=MESH_CRS)
 
 
-def write_class_cache(root: Path, years: Sequence[int] = CACHED_YEARS) -> Path:
+def write_class_cache(
+    root: Path, years: Sequence[int] = CACHED_YEARS, *, no_data: bool = False
+) -> Path:
     """The cache of the test class source for `years`, as `fetch --year` leaves
-    it, each object fetched on `FETCHED`."""
-    directory = write_cache(
-        root, KEY, {object_id(y): class_tiff(y) for y in years}, crs="EPSG:4326"
-    )
+    it, each object fetched on `FETCHED`. Without `no_data` every pixel holds
+    a class, so a mesh over it meets no coverage gap; with it, the block of
+    class 0 (`class_grid`) is written."""
+    tiffs = {object_id(y): class_tiff(y, no_data=no_data) for y in years}
+    directory = write_cache(root, KEY, tiffs, crs="EPSG:4326")
     manifest_path = directory / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
     for entry in manifest["objects"].values():
@@ -311,4 +315,31 @@ def same_rows(got: Iterable[Row], want: Iterable[Row], tolerance: float) -> list
         for k in w:
             if abs(g[k] - w[k]) > tolerance:
                 findings.append(f"triangle {t}, class {k}: {g[k]!r} against {w[k]!r}")
+    return findings[:20]
+
+
+def zero_merged(
+    got: Iterable[Row], want: Iterable[Row], tolerance: float, water: frozenset[int] = frozenset()
+) -> list[str]:
+    """Where `got` is not `want` with its class-0 share merged
+    (`docs/increments/122-lakes-overrule.md`, section 3.3): no row of `got`
+    holds class 0; a row of `want` with a 0 share over `tolerance` has it
+    joined to exactly one class (one already in the row or a new one), every
+    other class as `want`, and the class it joins not in `water`; a row
+    without one is `want`. The first twenty findings, as text."""
+    findings: list[str] = []
+    for t, (g, w) in enumerate(zip(got, want, strict=True)):
+        if 0 in g:
+            findings.append(f"triangle {t}: keeps class 0 ({g[0]!r})")
+            continue
+        zero = w.get(0, 0.0)
+        rest = {k: v for k, v in w.items() if k != 0}
+        moved = {k: g.get(k, 0.0) - rest.get(k, 0.0) for k in set(g) | set(rest)}
+        off = sorted(k for k, d in moved.items() if abs(d) > tolerance)
+        if zero <= tolerance:
+            ok = not off
+        else:
+            ok = len(off) == 1 and abs(moved[off[0]] - zero) <= tolerance and off[0] not in water
+        if not ok:
+            findings.append(f"triangle {t}: {g} against {w} with its 0 share merged")
     return findings[:20]

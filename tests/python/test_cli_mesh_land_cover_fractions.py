@@ -54,6 +54,7 @@ from fraction_fixtures import (
     write_class_cache,
     write_dem,
     write_domain,
+    zero_merged,
 )
 from plyread import read_ply
 from recordread import file_field, ply_fields, stats_row
@@ -199,14 +200,24 @@ class TestTheFile:
         assert_array_equal(codes[lines:], [dominant(row) for row in run.rows])
 
     def test_the_fractions_are_the_oracles(self, run: Covered) -> None:
-        want = oracle_fractions(run.vtk.points, run.triangles, class_grid(2025))
+        want = oracle_fractions(run.vtk.points, run.triangles, class_grid(2025, no_data=False))
         assert same_rows(run.rows, want, FRACTION) == []
 
-    def test_the_classes_are_the_rasters_and_no_data_is_among_them(self, run: Covered) -> None:
+    def test_the_classes_are_the_rasters_and_no_data_is_merged(
+        self, classes: Any, offline: None, tmp_path: Path, dem: Path, domain: Path
+    ) -> None:
+        """The cache with its block of class 0 (no data), which the mesh
+        reaches, and `--land-cover-partial`: each triangle's 0 share joins a
+        class (`docs/increments/122-lakes-overrule.md`, section 3.3), so no
+        row keeps class 0."""
+        blocked = write_class_cache(tmp_path / "blocked", no_data=True)
+        run = covered(tmp_path, dem, domain, blocked, "--land-cover-partial")
         seen = set(run.classes.tolist())
-        assert seen <= set(CLASSES) | {0}
-        assert 0 in seen, "the mesh reaches the block of class 0 (1.1: a class like any other)"
+        assert seen <= set(CLASSES)
+        assert 0 not in seen, "a row keeps class 0"
         assert sum(len(row) > 1 for row in run.rows) > 10, "mixed triangles are the point"
+        want = oracle_fractions(run.vtk.points, run.triangles, class_grid(2025))
+        assert zero_merged(run.rows, want, FRACTION) == []
 
     def test_the_strings_name_the_source_year_credit_licence_and_citation(
         self, run: Covered
@@ -215,7 +226,7 @@ class TestTheFile:
         # 11"); RemoteSource has none, so the catalogue key stands in: it is the
         # name `--land-cover` and `fetch` take, so a reader can act on it.
         assert run.string("land_cover_codes") == (
-            f"{KEY} class number; 0 = no data, and every constraint line"
+            f"{KEY} class number; 0 = every constraint line; no triangle"
         )
         assert run.string("land_cover_source") == f"{KEY}, 2025"
         credit = run.string("land_cover_credit")
@@ -237,7 +248,7 @@ class TestTheYear:
         early = covered(tmp_path / "b", dem, domain, cache, "--land-cover-year", "1985")
         assert "1985" in early.string("land_cover_source")
         assert "2025" in latest.string("land_cover_source")
-        want = oracle_fractions(early.vtk.points, early.triangles, class_grid(1985))
+        want = oracle_fractions(early.vtk.points, early.triangles, class_grid(1985, no_data=False))
         assert same_rows(early.rows, want, FRACTION) == []
         assert early.rows != latest.rows, "the two years differ cell by cell"
 

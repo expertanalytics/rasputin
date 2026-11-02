@@ -3,9 +3,9 @@
 
 `docs/increments/111-one-land-cover-map.md`, *5. Tests*, tests 2 to 11 (test
 1, `land_cover_map.build`, is `test_land_cover_map.py`'s). The scene is
-`test_cli_mesh_prefer.py`'s: `cover_polygons` (forest 311 and 312, water 512)
-in `cover.geojson`, the preferred lake in `lake.geojson`, every clean-up
-switch 0 (`AS_READ`).
+`test_cli_mesh_prefer.py`'s: `cover_polygons` (forest 311 and 312, water 512,
+heath 322 over the rest) in `cover.geojson`, the preferred lake in
+`lake.geojson`, every clean-up switch 0 (`AS_READ`).
 
 THE ORACLE for a line length: the `lines` layer of the `.gpkg` written, one
 row per constraint edge with its plan length and one 0/1 column per edge
@@ -77,7 +77,12 @@ from dataset_fixtures import write_sources
 from feature_fixtures import Feat, write_geojson
 from fraction_fixtures import MESH_CRS, dem_origin, domain_ring, dominant
 from legend_fixtures import basenames, coded_map, write
-from test_cli_land_cover_polygons import cover_polygons, write_cover_geojson, write_cover_gpkg
+from test_cli_land_cover_polygons import (
+    cover_polygons,
+    partial_cover,
+    write_cover_geojson,
+    write_cover_gpkg,
+)
 from test_cli_mesh_cache import no_network
 from test_cli_mesh_cells import check_sums, column, mesh, scene, written
 from test_cli_mesh_prefer import (
@@ -109,6 +114,12 @@ SHARE = 1e-6
 AS_READ = ("--edges-repair", "0", "--edges-max-shift", "0", "--edges-outline-snap", "0")
 #: Arable land: a class `--prefer lake=` does not replace, and no water class.
 ARABLE = 211
+#: Heath, the scene's cover outside its three classes (`cover_polygons()`).
+HEATH = 322
+#: The override, on the two-file scenes whose figures are the area and border
+#: each file keeps: they leave the scene's heath out, so a gap (K6 of
+#: `docs/increments/122-lakes-overrule.md`, section 7a).
+PARTIAL = ("--land-cover-partial",)
 
 
 def classes(*files: Path | str) -> tuple[str, ...]:
@@ -585,6 +596,11 @@ def codes_of(conn: sqlite3.Connection) -> np.ndarray:
     return np.array([r[0] for r in rows], dtype="<i4")
 
 
+def marks_of(conn: sqlite3.Connection) -> np.ndarray:
+    rows = conn.execute("SELECT land_cover_filled FROM triangles ORDER BY fid").fetchall()
+    return np.array([r[0] for r in rows], dtype="<i4")
+
+
 def test_9_land_cover_alone_writes_the_shares(
     scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path, phases: list[str]
 ) -> None:
@@ -601,12 +617,16 @@ def test_9_class_borders_alone_give_todays_codes_and_no_shares(
     args = (*classes(cover), *edges("all"), *AS_READ, "--stats", str(stats))
     with closing(run_gpkg(scene, tmp_path / "x.gpkg", *args)) as conn:
         assert not has_shares(conn)
-        codes = codes_of(conn)
+        codes, marks = codes_of(conn), marks_of(conn)
         texts = [str(v) for (v,) in conn.execute("SELECT value FROM run").fetchall()]
     assert any("not computed" in t and "add --shares" in t for t in texts), texts
     assert "land cover fractions" not in phases, phases
     report = stats.read_text(encoding="utf-8")
     assert "| edges |" in report and "land cover fractions" not in report, report
+    # The scene's heath 322 covers what was code 0, so nothing is filled;
+    # read back as 0, the codes are today's.
+    assert not (codes == 0).any() and not marks.any()
+    codes = np.where(codes == HEATH, 0, codes).astype(codes.dtype)
     found, counts = np.unique(codes, return_counts=True)
     assert dict(zip(found.tolist(), counts.tolist(), strict=True)) == TODAYS_CODES
     assert hashlib.sha256(codes.tobytes()).hexdigest() == TODAYS_DIGEST
@@ -684,10 +704,14 @@ def test_10_the_planted_box_premises() -> None:
 def test_10_a_box_wholly_inside_an_earlier_files_polygon_is_cut_away(
     scene: dict[str, Path], tmp_path: Path, lake: Path
 ) -> None:
+    """No heath 322, so the run needs `--land-cover-partial`. The forest
+    share is all but the preferred lake's: the gap, and water 512's leftover
+    east of the lake (no non-water neighbour, section 3.1), take the nearest
+    non-water class, forest, and so do their 0 shares (section 3.3)."""
     polygons = dict(cover_polygons())
     a, b = split(tmp_path, [(311, polygons[311]), (312, polygons[312])],
                  [(512, polygons[512]), (ARABLE, planted_box())])  # fmt: skip
-    args = (*classes(a, b), *prefer(lake), *edges("all"), "--shares", *AS_READ)
+    args = (*classes(a, b), *prefer(lake), *edges("all"), "--shares", *AS_READ, *PARTIAL)
     with closing(run_gpkg(scene, tmp_path / "x.gpkg", *args)) as conn:
         found = lengths(conn)
         overlap = overlap_figure(conn)
@@ -695,7 +719,10 @@ def test_10_a_box_wholly_inside_an_earlier_files_polygon_is_cut_away(
         assert ARABLE not in {
             c for (c,) in conn.execute("SELECT DISTINCT code FROM land_cover_fractions")
         }
-        check_case7_shares(conn)
+        assert_allclose(column(conn, "cells", "lake"), share(conn, preferred_lake()), atol=SHARE)
+        land = share(conn, domain().difference(preferred_lake()))
+        assert_allclose(column(conn, "cells", "forest"), land, atol=SHARE)
+        check_sums(conn)
     assert found["land_cover"] == pytest.approx(9082.7, abs=LENGTH), found
     assert found["water"] == pytest.approx(2600.4, abs=LENGTH), found
     assert any(abs(n - 40160.1) <= AREA for n in numbers(overlap)), overlap
@@ -800,7 +827,7 @@ def test_10_a_bowtie_in_a_single_file_is_refused_not_a_traceback(
     `preferred.replace` throw GEOSException in `_cut`, as `--edges` with a
     clean-up switch made the clean-up's clip throw. The reader refuses it,
     with or without either: exit 2 naming the file and its fid (4)."""
-    f = write_cover_geojson(tmp_path / "a.geojson", [*cover_polygons(), (ARABLE, lone_bowtie())])
+    f = write_cover_geojson(tmp_path / "a.geojson", [*partial_cover(), (ARABLE, lone_bowtie())])
     target = tmp_path / "x.gpkg"
     more = tuple(a.replace("LAKE", str(lake)) for a in extra)
     code, output = mesh(scene, target, *classes(f), *more, "--shares")
@@ -856,9 +883,9 @@ def test_10_an_overlapping_pair_with_a_bowtie_far_outside_the_region_is_counted_
     (tmp_path / "far").mkdir()
     (tmp_path / "near").mkdir()
     a, b = split(tmp_path / "far", [*near_a, (311, square)], [*near_b, (ARABLE, tie)])
-    with_far = run_kept(scene, tmp_path / "far.gpkg", *classes(a, b), *extra)
+    with_far = run_kept(scene, tmp_path / "far.gpkg", *classes(a, b), *extra, *PARTIAL)
     a, b = split(tmp_path / "near", near_a, near_b)
-    without = run_kept(scene, tmp_path / "near.gpkg", *classes(a, b), *extra)
+    without = run_kept(scene, tmp_path / "near.gpkg", *classes(a, b), *extra, *PARTIAL)
     assert outside_count(with_far) == outside_count(without) + 2, (with_far, without)
 
 
@@ -922,7 +949,7 @@ def test_12_every_polygon_of_the_maps_areas_is_valid(
     if run == "far-pair":
         near_a, near_b = [(311, polygons[311]), (312, polygons[312])], [(512, polygons[512])]
         files = split(tmp_path, [*near_a, (311, square)], [*near_b, (ARABLE, tie)])
-        args: tuple[str, ...] = classes(*files)
+        args: tuple[str, ...] = (*classes(*files), *PARTIAL)
     else:
         lake = write_lake(tmp_path / "lake.geojson", long_lake())
         f = write_cover_geojson(tmp_path / "far.geojson", [*cover_polygons(), (ARABLE, tie)])
@@ -962,7 +989,7 @@ def test_10_the_box_first_given_keeps_its_area_and_border(
     polygons = dict(cover_polygons())
     a, b = split(tmp_path, [(311, polygons[311]), (312, polygons[312])],
                  [(512, polygons[512]), (ARABLE, planted_box())])  # fmt: skip
-    args = (*classes(b, a), *prefer(lake), *edges("all"), *AS_READ)
+    args = (*classes(b, a), *prefer(lake), *edges("all"), *AS_READ, *PARTIAL)
     with closing(run_gpkg(scene, tmp_path / "x.gpkg", *args)) as conn:
         found = lengths(conn)
         overlap = overlap_figure(conn)
@@ -992,7 +1019,7 @@ def test_10_a_county_line_without_the_merge_is_an_edge(
     scene: dict[str, Path], tmp_path: Path, lake: Path
 ) -> None:
     a, b = split(tmp_path, *halves())
-    args = (*classes(a, b), *prefer(lake), *edges("all"), *AS_READ)
+    args = (*classes(a, b), *prefer(lake), *edges("all"), *AS_READ, *PARTIAL)
     with closing(run_gpkg(scene, tmp_path / "x.gpkg", *args, "--no-edges-merge-same-class")) as c:
         found = lengths(c)
     assert found["land_cover"] == pytest.approx(10782.1, abs=LENGTH), found
@@ -1005,7 +1032,7 @@ def test_10_a_county_line_with_one_class_on_both_sides_is_not_followed(
     same-class merge the cut between them is no border. A veto changes this
     test alone."""
     a, b = split(tmp_path, *halves())
-    args = (*classes(a, b), *prefer(lake), *edges("all"), *AS_READ)
+    args = (*classes(a, b), *prefer(lake), *edges("all"), *AS_READ, *PARTIAL)
     with closing(run_gpkg(scene, tmp_path / "x.gpkg", *args, "--edges-merge-same-class")) as c:
         found = lengths(c)
     assert found["land_cover"] == pytest.approx(9082.7, abs=LENGTH), found
@@ -1038,10 +1065,10 @@ def test_10_two_catalogue_entries_whose_classes_differ_are_refused(
 #: Pinned from today's tree with `--features cover.geojson --features-rules
 #: corine`, the clean-up switches 0 and `--pieces 4`.
 PIECES = {
-    "0-0-0": (447, {0: 171, 311: 276}),
-    "0-1-0": (484, {0: 198, 311: 15, 312: 87, 512: 184}),
-    "1-0-0": (437, {0: 159, 311: 278}),
-    "1-1-0": (438, {0: 258, 311: 14, 512: 166}),
+    "0-0-0": (447, {311: 276, 322: 171}),
+    "0-1-0": (484, {311: 15, 312: 87, 322: 198, 512: 184}),
+    "1-0-0": (437, {311: 278, 322: 159}),
+    "1-1-0": (438, {311: 14, 322: 258, 512: 166}),
 }
 
 
@@ -1052,6 +1079,8 @@ def pieces_of(tmp_path: Path) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     for f in sorted(directory.glob("*.vtk")):
         vtk = read_vtk(f.read_bytes())
         codes = np.asarray(vtk.cell_array("land_cover_code").values).astype(int)
+        marks = np.asarray(vtk.cell_array("land_cover_filled").values).astype(int)
+        assert not marks.any(), f"{f.name}: a triangle is filled"
         corners = np.array([np.asarray(vtk.points)[c] for c in vtk.polygons])
         out[f.stem] = (corners, codes[len(vtk.lines) :])
     return out
@@ -1150,7 +1179,7 @@ def test_13_a_land_cover_polygon_with_a_thin_spike_is_refused(
     `--land-cover`, the file and the polygon's fid (4), with no traceback."""
     spike = spiked_lake(SPIKE_BASE)
     assert not spike.is_valid  # the premise
-    f = write_cover_geojson(tmp_path / "a.geojson", [*cover_polygons(), (311, spike)])
+    f = write_cover_geojson(tmp_path / "a.geojson", [*partial_cover(), (311, spike)])
     target = tmp_path / "x.gpkg"
     code, output = mesh(scene, target, *classes(f), *edges("all"))
     assert code == USAGE, output

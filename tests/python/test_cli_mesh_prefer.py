@@ -4,12 +4,13 @@ taken from a preferred polygon source, the rest from the land cover.
 `docs/increments/107-prefer-classes.md`, section 2 (the rule, the warning,
 the refusals), section 4 (legend `[prefer]` table, CLI, credit) and section 5,
 cases 6 and 7. The scene is `test_cli_mesh_cells.py`'s on the polygon route
-with `corine` (`cover_polygons`: forest 311 and 312, water 512, the rest
-uncovered). The preferred lake rectangle covers the east end of forest 311,
-the uncovered land between and the west of water 512. What is left of the
-water borders no kept polygon (a 200 m gap on every side), so it is left out
-(class 0): the lake share is the preferred lake's alone, and the warning fires
-(the preferred lake is smaller than the water it replaces).
+with `corine` (`cover_polygons`: forest 311 and 312, water 512, heath 322
+over the rest). The preferred lake rectangle covers the east end of forest
+311, the heath between and the west of water 512. What is left of the water
+borders heath alone, so it takes heath: the lake share is the preferred
+lake's alone, and the warning fires (the preferred lake is smaller than the
+water it replaces). Test 9 (`docs/increments/122-lakes-overrule.md`) runs on
+`island_scene()`, whose left-out water borders no kept polygon.
 
 THE ORACLE: per triangle of the `triangles` layer read back, GEOS's
 `intersection(...).area` share with the preferred lake (lake), and with the
@@ -442,3 +443,107 @@ def test_a_cached_source_never_fetched_here_is_refused_naming_the_fetch(
     assert "--prefer" in flat and "nopolygon" in flat, output
     assert f"rasputinfetch{RESERVOIRS_KEY}--domain" in flat, output
     assert not target.exists()
+
+
+# ------------------------------------------------------------ 122, test 9: no code 0
+
+
+def island_scene() -> tuple[BaseGeometry, BaseGeometry, list[tuple[int, BaseGeometry]]]:
+    """L, H and a cover of the DEM's box: heath 322 less L, lake 512 on L
+    (`docs/increments/122-lakes-overrule.md`, test 19). With `--prefer lake=`
+    L less H, the base's water in H borders no kept polygon, so it is left out
+    of the map: code 0 before the fill, yet no gap (the base's lake covers it)."""
+    x0, y0 = dem_origin()
+    lake = box(x0 + 800.3, y0 - 1600.7, x0 + 1600.9, y0 - 800.1)
+    hole = box(x0 + 1100.2, y0 - 1300.4, x0 + 1300.6, y0 - 1100.8)
+    dem_box = box(x0 - 30.0, y0 - 39 * 60.0 - 30.0, x0 + 39 * 60.0 + 30.0, y0 + 30.0)
+    return lake, hole, [(322, dem_box.difference(lake)), (512, lake)]
+
+
+@pytest.fixture
+def island(tmp_path: Path) -> tuple[BaseGeometry, tuple[str, ...]]:
+    """H, and the arguments of test 9's run on the island scene (no flag)."""
+    lake_box, hole, polygons = island_scene()
+    land = write_cover_geojson(tmp_path / "island-cover.geojson", polygons)
+    preferred = write_lake(tmp_path / "island-lake.geojson", lake_box.difference(hole))
+    return hole, corine(land, "--prefer", f"lake={preferred}")
+
+
+def marked_where_uncovered(marks: np.ndarray, corners_xy: np.ndarray, hole: BaseGeometry) -> None:
+    """`docs/increments/122-lakes-overrule.md`, section 3.3: a triangle whose
+    code was filled or whose 0 share moved is marked; the map leaves H out,
+    so marked exactly where the triangle reaches H (share over 1e-6), never
+    where it does not (under 1e-9), and none lies between."""
+    triangles = shapely.polygons(corners_xy)
+    rest = shapely.area(shapely.intersection(triangles, hole)) / shapely.area(triangles)
+    assert not ((rest > 1e-9) & (rest <= 1e-6)).any()
+    assert (rest > 1e-6).any(), "the island reaches no triangle"
+    wrong = np.flatnonzero((marks == 1) != (rest > 1e-6))
+    assert not len(wrong), f"{len(wrong)} triangles marked wrongly, first {wrong[:10]}"
+
+
+def test_9_no_triangle_keeps_code_0_in_a_gpkg(
+    scene: dict[str, Path], tmp_path: Path, island: tuple[BaseGeometry, tuple[str, ...]]
+) -> None:
+    """122's test 9, on the default path (no `--land-cover-partial`): the
+    island left out of the map is filled and marked; the record counts the
+    marked triangles, no fractions row is code 0, and the fill's stderr line
+    is printed once."""
+    hole, args = island
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(scene, target, *args)
+    assert code == 0, output
+    assert squashed(output).count("innopolygontookthenearestnon-waterclass") == 1, output
+    with closing(sqlite3.connect(target)) as conn:
+        rows = conn.execute("SELECT code, land_cover_filled FROM triangles ORDER BY fid").fetchall()
+        codes = np.array([r[0] for r in rows])
+        marks = np.array([r[1] for r in rows])
+        assert not (codes == 0).any()
+        marked_where_uncovered(marks, corners(conn)[:, :, :2], hole)
+        filled = record(conn, "land_cover_filled")
+        assert filled is not None and int(filled) == int(marks.sum())
+        area = record(conn, "land_cover_filled_m2")
+        assert area is not None and float(area) > 0.0
+        zero = conn.execute("SELECT count(*) FROM land_cover_fractions WHERE code = 0")
+        assert zero.fetchone() == (0,)
+
+
+def test_9_no_triangle_keeps_code_0_in_a_vtk_or_ply(
+    scene: dict[str, Path], tmp_path: Path, island: tuple[BaseGeometry, tuple[str, ...]]
+) -> None:
+    """The same in a `.vtk` (an `int` cell array `land_cover_filled`, 0 on
+    every line cell, read back by `read_mesh`) and a `.ply` (a face property
+    `uchar land_cover_filled` after `land_cover_code`)."""
+    from plyread import read_ply
+    from tin_engine.io.vtk_read import read_mesh
+    from vtkread import read_vtk
+
+    hole, args = island
+    vtk_path, ply_path = tmp_path / "x.vtk", tmp_path / "x.ply"
+    for target in (vtk_path, ply_path):
+        code, output = mesh(scene, target, *args)
+        assert code == 0, output
+    vtk = read_vtk(vtk_path.read_bytes())
+    lines = len(vtk.lines)
+    filled = vtk.cell_array("land_cover_filled")
+    assert filled.type_name == "int"
+    marks = np.asarray(filled.values).astype(int)
+    assert not marks[:lines].any(), "a line cell is marked"
+    codes = np.asarray(vtk.cell_array("land_cover_code").values)
+    assert not (codes[lines:] == 0).any()
+    points = np.asarray(vtk.points)
+    corners_xy = np.array([points[np.asarray(p)][:, :2] for p in vtk.polygons])
+    marked_where_uncovered(marks[lines:], corners_xy, hole)
+    arrays = read_mesh(vtk_path.read_bytes())
+    assert arrays.land_cover_filled is not None
+    assert (np.asarray(arrays.land_cover_filled) == marks[lines:]).all()
+    header, elements = read_ply(ply_path.read_bytes())
+    names = [p.name for p in header.element("face").properties]
+    assert names.index("land_cover_filled") == names.index("land_cover_code") + 1, names
+    (kind,) = [
+        p.type_name for p in header.element("face").properties if p.name == "land_cover_filled"
+    ]
+    assert kind == "uchar"
+    face = elements["face"]
+    assert not (np.asarray(face["land_cover_code"]) == 0).any()
+    assert int(np.asarray(face["land_cover_filled"]).sum()) == int(marks.sum())
