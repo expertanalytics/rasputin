@@ -1099,19 +1099,22 @@ def test_areas_a_fourth_running_writer_is_refused(
 
 
 def private_tree(repo: Path, place: Path, branch: str) -> Path:
-    """A worktree on `branch` from `private-master`, a master with no history in
-    common with the fixture's, made once, and set as the branch's upstream."""
-    if not git(repo, "branch", "--list", "private-master").strip():
+    """A worktree on `branch` from `private/master`, a remote master with no history
+    in common with the fixture's, made once, and set as the branch's upstream (as
+    `tools/new_worktree.py <name> --from private/master` does)."""
+    if not git(repo, "remote").strip():
         scratch = place.parent / "private-scratch"
         git(repo, "worktree", "add", "-q", "--detach", str(scratch))
-        git(scratch, "switch", "-q", "--orphan", "private-master")
+        git(scratch, "switch", "-q", "--orphan", "private-root")
         for relative in ("tools/old.py", "src/old.cpp", "src_python/old.py"):
             write(scratch, relative, "old\n")
         git(scratch, "add", "-A")
         git(scratch, "commit", "-q", "-m", "private root")
+        git(repo, "remote", "add", "private", str(scratch))
+        git(repo, "update-ref", "refs/remotes/private/master", "private-root")
         git(repo, "worktree", "remove", "--force", str(scratch))
-    git(repo, "worktree", "add", "-q", "-b", branch, str(place), "private-master")
-    git(place, "branch", "-q", "--set-upstream-to=private-master")
+    git(repo, "worktree", "add", "-q", "-b", branch, str(place), "private/master")
+    git(place, "branch", "-q", "--set-upstream-to=private/master")
     return place
 
 
@@ -1145,3 +1148,17 @@ def test_areas_the_refusal_names_at_most_ten_paths(
     ok(repo, home, *area_brief(trees["A"], *files))
     said = refused(repo, home, *area_brief(trees["B"], "tools/"), says="and 2 more")
     assert sum(f in said for f in files) == 10, said
+
+
+def test_areas_a_pushed_branchs_base_is_its_remotes_master(
+    repo: Path, home: Path, tmp_path: Path
+) -> None:
+    """After a push, the upstream is the branch's own remote copy; the area still
+    counts every commit since the remote's master, pushed ones included."""
+    p = private_tree(repo, tmp_path.resolve() / "P", "wt-p")
+    commit_file(p, "tools/p.py")
+    git(repo, "update-ref", "refs/remotes/private/wt-p", "wt-p")
+    git(p, "branch", "-q", "--set-upstream-to=private/wt-p")
+    commit_file(p, "src/p.cpp")
+    ok(repo, home, *area_brief(p))
+    assert [e["area"] for e in areas(repo)] == [["src/p.cpp", "tools/p.py"]]
