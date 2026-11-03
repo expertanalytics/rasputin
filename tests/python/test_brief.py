@@ -1162,3 +1162,23 @@ def test_areas_a_pushed_branchs_base_is_its_remotes_master(
     commit_file(p, "src/p.cpp")
     ok(repo, home, *area_brief(p))
     assert [e["area"] for e in areas(repo)] == [["src/p.cpp", "tools/p.py"]]
+
+
+# ---------------------------------------------------------------- settled results first
+
+
+@pytest.mark.parametrize("args", [("architect",), ("perf", "--probe")])
+def test_findings_a_design_or_probe_brief_needs_a_recent_search(
+    repo: Path, home: Path, args: tuple[str, ...]
+) -> None:
+    (repo / ".git" / "findings-searches.jsonl").unlink()
+    refused(repo, home, *args_for(args[0], repo, *args[1:]), says="tools/findings.py search")
+
+
+def test_findings_other_briefs_need_no_search(repo: Path, home: Path) -> None:
+    (repo / ".git" / "findings-searches.jsonl").unlink()
+    ok(repo, home, *args_for("tester", repo))
+
+
+def test_findings_a_recent_search_lets_a_design_brief_through(repo: Path, home: Path) -> None:
+    ok(repo, home, *args_for("architect", repo))

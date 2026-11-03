@@ -20,6 +20,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+sys.path.append(str(Path(__file__).resolve().parent))  # appended: the stdlib wins (h16 G4)
+import findings  # beside this file
+
 ROOT = Path(__file__).resolve().parents[1]
 #: Chosen: two lines of the recap's 120 characters.
 LIMIT = 240
@@ -164,6 +167,9 @@ def command(args: argparse.Namespace, store: Path, now: datetime) -> list[str]:
     records, _ = load(store)
     if args.cmd in ("add", "taken"):
         kind = "taken" if args.cmd == "taken" else "act" if args.act else "question"
+        unsearched = findings.unsearched(store.with_name(findings.SEARCHES), now)
+        if kind == "question" and unsearched:
+            raise RefusedError(unsearched)
         _check(args, records, kind)
         number = max((int(r["id"][1:]) for r in records if r["id"][1:].isdigit()), default=0)
         choices = [c for c in (getattr(args, "choices", "") or "").split("|") if c]

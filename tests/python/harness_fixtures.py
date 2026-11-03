@@ -71,6 +71,8 @@ COPIED = (
     # this module (docs/increments/h40-detached-runs.md, "Boundary with existing
     # tools").
     "tools/detach.py",
+    # questions.py and brief.py refuse until a search of the settled results ran.
+    "tools/findings.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"
@@ -133,7 +135,17 @@ def make_repo(root: Path) -> Path:
     (root / "notes.txt").write_text("notes\n")
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "root")
+    searched(root / ".git")
     return root
+
+
+def searched(common: Path, at: datetime | None = None) -> None:
+    """A search of the settled results at `at` (default now), as `findings.py search` records it."""
+    common.mkdir(parents=True, exist_ok=True)
+    stamp = (at or datetime.now(UTC)).isoformat()
+    (common / "findings-searches.jsonl").write_text(
+        json.dumps({"at": stamp, "words": ["x"]}) + "\n"
+    )
 
 
 def remote_urls(root: Path) -> dict[str, str]:
