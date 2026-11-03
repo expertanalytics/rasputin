@@ -23,9 +23,9 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
   `--hardening on` or `off` with its own kind.
 * **Rebuilt:** with `--no-build`, run `python3 tools/rebuild_core.py` first.
 * **Heavy, detached:** a timed acceptance, scaling or lsm run goes out
-  detached (`detach.py start`), beside nothing; hand back and re-attach with
-  `detach.py status`, reading the run dir. The untimed rest runs
-  `--untimed`.
+  detached (`detach.py start`), beside nothing; hand back, re-attach with
+  `detach.py status`, reading the run dir. Mark each stage:
+  `tools/brief.py stage <worktree> timed|untimed`.
 * **Median of repeats;** record machine, threads, DEM, domain, tolerance and
   quality (worst angle, max vertex degree, tolerance and Delaunay checks).
   Faster with worse quality is a regression.
@@ -36,7 +36,7 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 
 ## 3. Evidence
 Commit `docs/benchmarks/<date>/` with a `README.md` (tables, method), raw
-data and the script version; meshes stay out, with how to regenerate them. A
+data and script version; meshes stay out, with how to regenerate them. A
 plot of observed against modelled series has three lines unless Ola asks for
 more: observed, best so far, the run under study, with plain-word legends.
 
