@@ -7,6 +7,7 @@ never read or written. The commit a test names is this checkout's HEAD.
 
 from __future__ import annotations
 
+import importlib
 import json
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -15,6 +16,7 @@ from pathlib import Path
 import pytest
 
 import harness_fixtures
+from brief_fixtures import human
 
 pytestmark = pytest.mark.harness
 
@@ -26,9 +28,21 @@ HEAD = subprocess.run(["git", "-C", str(harness_fixtures.REAL), "rev-parse", "HE
                       capture_output=True, text=True, check=True).stdout.strip()  # fmt: skip
 
 
+AGREED = "Yes, say it that way."
+STAMP = "2026-11-03T05:50:00.000Z"
+SESSION = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
+
+
 @pytest.fixture
-def paths(tmp_path: Path) -> tuple[Path, Path]:
-    """The ledger and the search record, neither yet written."""
+def paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """The ledger and the search record, neither yet written, and a session transcript
+    in which Ola said `AGREED`, read by `brief.py`'s quotation check."""
+    assert findings.LIMIT  # loads the tool, which puts tools/ on the path
+    transcripts = tmp_path / "transcripts"
+    transcripts.mkdir()
+    (transcripts / f"{SESSION}.jsonl").write_text(json.dumps(human(AGREED, STAMP)) + "\n")
+    monkeypatch.setattr(importlib.import_module("session_state"), "TRANSCRIPTS", transcripts)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", SESSION)
     return tmp_path / "ledger.jsonl", tmp_path / "common" / "findings-searches.jsonl"
 
 
@@ -45,18 +59,32 @@ def refused(paths: tuple[Path, Path], *argv: str) -> str:
 
 
 def add(paths: tuple[Path, Path], text: str, *topics: str) -> None:
-    run(paths, "add", text, "--commit", HEAD, *(f"--topic={t}" for t in topics))
+    run(paths, "add", text, "--commit", HEAD, "--ola", AGREED, *(f"--topic={t}" for t in topics))
+
+
+def entries(paths: tuple[Path, Path]) -> list[dict[str, object]]:
+    return [json.loads(line) for line in paths[0].read_text().splitlines()]
 
 
 def test_add_stores_the_result_with_its_full_commit_and_topics(paths: tuple[Path, Path]) -> None:
     add(paths, "Two delays in series slow the response twice over.", "delay", "response")
-    [entry] = [json.loads(line) for line in paths[0].read_text().splitlines()]
+    [entry] = entries(paths)
     assert entry["text"] == "Two delays in series slow the response twice over."
     assert entry["commit"] == HEAD and entry["topics"] == ["delay", "response"]
+    assert entry["ola"] == f'"{AGREED}" ({STAMP})'
+
+
+def test_add_needs_olas_words_from_this_sessions_transcript(paths: tuple[Path, Path]) -> None:
+    with pytest.raises(SystemExit):
+        run(paths, "add", "A result.", "--commit", HEAD, "--topic=x")
+    said = refused(paths, "add", "A result.", "--commit", HEAD, "--topic=x", "--ola", "Sure.")
+    assert "transcript" in said
 
 
 def test_add_refuses_a_commit_git_does_not_have(paths: tuple[Path, Path]) -> None:
-    assert "no commit" in refused(paths, "add", "A result.", "--commit", "0" * 40, "--topic=x")
+    assert "no commit" in refused(
+        paths, "add", "A result.", "--commit", "0" * 40, "--topic=x", "--ola", AGREED
+    )
 
 
 def test_add_needs_a_topic(paths: tuple[Path, Path]) -> None:
@@ -65,12 +93,14 @@ def test_add_needs_a_topic(paths: tuple[Path, Path]) -> None:
 
 
 def test_add_refuses_text_that_is_not_plain_words(paths: tuple[Path, Path]) -> None:
-    said = refused(paths, "add", "See tools/brief.py for it.", "--commit", HEAD, "--topic=x")
+    said = refused(
+        paths, "add", "See tools/brief.py for it.", "--commit", HEAD, "--topic=x", "--ola", AGREED
+    )
     assert "plain words" in said
 
 
 def test_add_refuses_a_text_over_the_cap(paths: tuple[Path, Path]) -> None:
-    said = refused(paths, "add", "word " * 60, "--commit", HEAD, "--topic=x")
+    said = refused(paths, "add", "word " * 60, "--commit", HEAD, "--topic=x", "--ola", AGREED)
     assert "at most" in said
 
 
@@ -103,6 +133,25 @@ def test_list_prints_every_entry(paths: tuple[Path, Path]) -> None:
     add(paths, "First result.", "a")
     add(paths, "Second result.", "b")
     assert [line[:3] for line in run(paths, "list")] == ["1. ", "2. "]
+
+
+def test_replace_rewrites_an_entry_in_place_with_olas_words(paths: tuple[Path, Path]) -> None:
+    add(paths, "First result.", "a")
+    add(paths, "Second result.", "b")
+    with pytest.raises(findings.RefusedError, match="transcript"):
+        run(paths, "replace", "1", "New first.", "--ola", "Sure.")
+    run(paths, "replace", "1", "New first.", "--ola", AGREED)
+    assert [e["text"] for e in entries(paths)] == ["New first.", "Second result."]
+    assert entries(paths)[0]["topics"] == ["a"]
+
+
+def test_drop_removes_an_entry_and_a_missing_number_is_refused(paths: tuple[Path, Path]) -> None:
+    add(paths, "First result.", "a")
+    add(paths, "Second result.", "b")
+    run(paths, "drop", "1")
+    assert [e["text"] for e in entries(paths)] == ["Second result."]
+    with pytest.raises(findings.RefusedError):
+        run(paths, "drop", "2")
 
 
 def test_the_gate_refuses_until_a_search_and_names_the_command(paths: tuple[Path, Path]) -> None:
