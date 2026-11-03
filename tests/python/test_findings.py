@@ -2,7 +2,9 @@
 
 Every test runs `command()` on a ledger and a search record in `tmp_path`, so
 the repository's ledger and the live record under the git common directory are
-never read or written. The commit a test names is this checkout's HEAD.
+never read or written. The commit a test names is this checkout's HEAD, which
+the ledger's own repository (a `git init` in `tmp_path`) borrows through git's
+alternates file, as a private repository holding the same commits would.
 """
 
 from __future__ import annotations
@@ -43,7 +45,16 @@ def paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     (transcripts / f"{SESSION}.jsonl").write_text(json.dumps(human(AGREED, STAMP)) + "\n")
     monkeypatch.setattr(importlib.import_module("session_state"), "TRANSCRIPTS", transcripts)
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", SESSION)
+    git(tmp_path, "init", "-q")
+    common = git(harness_fixtures.REAL, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    (tmp_path / ".git" / "objects" / "info" / "alternates").write_text(f"{common}/objects\n")
     return tmp_path / "ledger.jsonl", tmp_path / "common" / "findings-searches.jsonl"
+
+
+def git(where: Path, *argv: str) -> str:
+    return subprocess.run(["git", "-C", str(where), "-c", "user.name=t", "-c", "user.email=t@t",
+                           "-c", "commit.gpgsign=false", *argv],
+                          capture_output=True, text=True, check=True).stdout.strip()  # fmt: skip
 
 
 def run(paths: tuple[Path, Path], *argv: str, now: datetime = NOW) -> list[str]:
@@ -176,3 +187,51 @@ def test_questions_act_and_taken_need_no_search(tmp_path: Path) -> None:
     for argv in (["add", "May I push?", "--default", "no", "--act"],
                  ["taken", "Kept the old name.", "--default", "keep"]):  # fmt: skip
         questions.command(questions.parser().parse_args(argv), store, NOW)
+
+
+def main(capsys: pytest.CaptureFixture[str], *argv: str) -> list[str]:
+    assert findings.main(list(argv)) == 0
+    return capsys.readouterr().out.splitlines()
+
+
+@pytest.fixture
+def live(paths: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """`main()` with its search record moved to `tmp_path`, and the default ledger too;
+    patched in the loaded modules themselves, since `Tool` only forwards reads."""
+    record = paths[1].with_name("q.jsonl")
+    monkeypatch.setattr(importlib.import_module("questions"), "store_of", lambda _root: record)
+    monkeypatch.setattr(importlib.import_module("u1_findings"), "LEDGER", paths[0].with_name("d"))
+    monkeypatch.delenv("FINDINGS_LEDGER", raising=False)
+    return paths
+
+
+def test_the_variable_redirects_add_search_and_list(
+    live: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("FINDINGS_LEDGER", str(live[0]))
+    main(capsys, "add", "A private result.", "--commit", HEAD, "--topic=x", "--ola", AGREED)
+    assert [e["text"] for e in entries(live)] == ["A private result."]
+    assert main(capsys, "search", "private")[0].startswith("1. A private result.")
+    assert main(capsys, "list")[0].startswith("1. A private result.")
+    assert live[1].exists() and not findings.LEDGER.exists()
+
+
+def test_unset_the_ledger_stays_the_default(
+    live: tuple[Path, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(capsys, "add", "A public result.", "--commit", HEAD, "--topic=x", "--ola", AGREED)
+    assert main(capsys, "list")[0].startswith("1. A public result.")
+    assert findings.LEDGER.exists() and not live[0].exists()
+
+
+def test_the_commit_is_checked_in_the_ledgers_own_repository(paths: tuple[Path, Path]) -> None:
+    private = paths[0].parent / "private"
+    git(private.parent, "init", "-q", str(private))
+    git(private, "commit", "-q", "--allow-empty", "-m", "a private commit")
+    own = git(private, "rev-parse", "HEAD")
+    ledger = (private / "docs" / "findings.jsonl", paths[1])
+    assert "no commit" in refused(
+        ledger, "add", "A.", "--commit", HEAD, "--topic=x", "--ola", AGREED
+    )
+    run(ledger, "add", "A.", "--commit", own, "--topic=x", "--ola", AGREED)
+    assert [e["commit"] for e in entries(ledger)] == [own]
