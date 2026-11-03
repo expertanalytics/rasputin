@@ -473,8 +473,10 @@ def test_6_untimed_perf_runs_beside_a_writer_and_a_reader(
     beside: tuple[str, ...],
 ) -> None:
     entries = [f"{e.split(':')[0]}:{trees[e.split(':')[1]]}" for e in beside]
-    line = concurrency(ok(repo, home, *run_as(persona, trees[where], *entries,
-                                              extra=("--untimed",))))  # fmt: skip
+    if persona != "perf":  # the running @perf's own brief says it is untimed
+        ok(repo, home, *run_as("perf", trees["B"], "none", extra=("--untimed",)))
+    extra = ("--untimed",) if persona == "perf" else ()
+    line = concurrency(ok(repo, home, *run_as(persona, trees[where], *entries, extra=extra)))
     assert f"@developer (writer, in {trees['A'].resolve()})" in line, line
     if persona == "perf":
         assert f"@reviewer (read-only, in {trees['C'].resolve()})" in line, line
@@ -482,6 +484,43 @@ def test_6_untimed_perf_runs_beside_a_writer_and_a_reader(
     else:
         assert f"@perf (writer, untimed run, in {trees['B'].resolve()})" in line, line
     assert "nothing runs beside a timing run" not in line, line
+
+
+# Stage timing: a running @perf marks each stage with `brief.py stage <worktree>
+# timed|untimed`, recorded on its areas.json entry; a brief beside it reads the
+# mark, and an entry without one counts as timed.
+
+
+def stage(repo: Path, home: Path, tree: Path, mark: str) -> None:
+    ok(repo, home, "stage", str(tree), mark)
+
+
+def test_stage_a_running_perf_counts_as_timed_until_marked(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    ok(repo, home, *run_as("perf", trees["B"], "none"))
+    beside_perf = run_as("developer", trees["A"], f"perf:{trees['B']}")
+    refused(repo, home, *beside_perf, says="nothing runs beside a timing run (@perf)")
+    stage(repo, home, trees["B"], "untimed")
+    line = concurrency(ok(repo, home, *beside_perf))
+    assert f"@perf (writer, untimed run, in {trees['B'].resolve()})" in line, line
+    stage(repo, home, trees["B"], "timed")
+    refused(repo, home, *beside_perf, says="nothing runs beside a timing run (@perf)")
+
+
+def test_stage_untimed_is_claimed_only_by_perfs_own_brief(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    args = run_as("developer", trees["A"], f"perf:{trees['B']}", extra=("--untimed",))
+    refused(repo, home, *args, says="--untimed marks a @perf brief")
+
+
+def test_stage_without_a_running_perf_is_refused(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    refused(repo, home, "stage", str(trees["B"]), "untimed", says="no running @perf in")
+    ok(repo, home, *run_as("perf", trees["B"], "none"))
+    refused(repo, home, "stage", str(trees["B"]), "later", says="timed|untimed")
 
 
 def test_6_untimed_perf_runs_beside_a_reader_alone(
