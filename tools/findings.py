@@ -7,8 +7,10 @@
 
     python3 tools/findings.py replace <n> "<new line>" --ola "<Ola's words>" | drop <n>
 
-The ledger is data, `docs/findings.jsonl`, one JSON entry per fact; a missing
-file is an empty ledger, and git history keeps what `replace` and `drop` remove.
+The ledger is data, `docs/findings.jsonl` or the path in `FINDINGS_LEDGER`, one
+JSON entry per fact; `--commit` names a commit of the repository holding the
+ledger, which may be private. A missing file is an empty ledger, and git
+history keeps what `replace` and `drop` remove.
 `add` and `replace` need `--ola`: Ola's agreement to the wording, found in this
 session's transcript as `brief.py --ola` finds it. Each `search` appends its time and
 words to `<git-common-dir>/findings-searches.jsonl`, untracked; `questions.py
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
@@ -89,7 +92,8 @@ def command(args: argparse.Namespace, ledger: Path, searches: Path, now: datetim
         raise RefusedError(f"the ledger has no entry {args.n}")
     if args.cmd == "add":
         ola = _worded(args)
-        shown = subprocess.run(["git", "-C", str(ROOT), "show", "-s", "--format=%H %cs",
+        home = next(d for d in ledger.parents if d.is_dir())  # the ledger's own repository
+        shown = subprocess.run(["git", "-C", str(home), "show", "-s", "--format=%H %cs",
                                 f"{args.commit}^{{commit}}"], capture_output=True, text=True,
                                check=False).stdout.split()  # fmt: skip
         if len(shown) != 2:
@@ -142,7 +146,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         searches = questions.store_of(ROOT).with_name(SEARCHES)
-        lines = command(parser().parse_args(argv), LEDGER, searches, datetime.now(UTC))
+        ledger = Path(os.environ.get("FINDINGS_LEDGER", LEDGER))
+        lines = command(parser().parse_args(argv), ledger, searches, datetime.now(UTC))
     except RefusedError as error:
         print(error, file=sys.stderr)
         return 1
