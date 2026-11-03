@@ -163,17 +163,18 @@ def _inside(path: str, prefix: str) -> bool:
     return path == prefix or path.startswith(prefix.rstrip("/") + "/")
 
 
-def _area(worktree: str, declared: list[str]) -> set[str]:
-    """Pipe 3.6: what the branch changes against its base, plus `declared` before its
-    first commit. The base is where it leaves the master of its upstream's remote (a
+def _area(worktree: str, declared: list[str], limit: list[str]) -> set[str]:
+    """Pipe 3.6: what the branch changes against its base inside `limit` (all, when
+    empty: a file it carries but may not write is not its to guard), plus `declared`
+    before its first commit. The base is where it leaves the master of its upstream's remote (a
     private-repo branch shares no recent history with origin/master; a pushed branch's
     upstream is its own copy), else origin/master, else master."""
     up = _git(worktree, "rev-parse", "--abbrev-ref", "@{upstream}") or ""
     refs = (up if up.endswith("master") else up.partition("/")[0] + "/master",
             "origin/master", "master")  # fmt: skip
     base = next(filter(None, (_git(worktree, "merge-base", "HEAD", r) for r in refs)), None)
-    changed = set((_git(worktree, "diff", "--name-only", base, "HEAD") or "").splitlines()
-                  if base else ())  # fmt: skip
+    diff = (_git(worktree, "diff", "--name-only", base, "HEAD") or "") if base else ""
+    changed = {p for p in diff.splitlines() if not limit or any(_inside(p, w) for w in limit)}
     return changed | set(declared) if base in (None, _git(worktree, "rev-parse", "HEAD")) \
         else changed  # fmt: skip
 
@@ -198,7 +199,8 @@ def _overlap(mine: dict[str, str | list[str]], running: list[dict[str, str | lis
         return f"@{e['persona']} ({e['item'] or 'no item'}, in {e['worktree']})"
 
     for other in running:
-        theirs = _area(str(other["worktree"]), list(other["declared"]))
+        theirs = _area(str(other["worktree"]), list(other["declared"]),
+                       list(other.get("limit", [])))  # fmt: skip
         shared = sorted({b if _inside(b, a) else a for a in mine["area"] for b in theirs
                          if _inside(a, b) or _inside(b, a)})  # fmt: skip
         if shared:
@@ -375,7 +377,8 @@ def _brief(argv: list[str] | None) -> str:
     declared = args.area or prefixes
     mine = {"persona": persona, "worktree": str(worktree), "item": args.item,
             "branch": _git(worktree, "rev-parse", "--abbrev-ref", "HEAD") or "", "note": str(note),
-            "declared": declared, "area": sorted(_area(str(worktree), declared))}  # fmt: skip
+            "declared": declared, "limit": prefixes,
+            "area": sorted(_area(str(worktree), declared, declared))}  # fmt: skip
     if persona == "perf":
         mine["timed"] = "untimed" if args.untimed else "timed"
     if WRITES[persona]:

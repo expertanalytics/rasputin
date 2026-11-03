@@ -1203,6 +1203,34 @@ def test_areas_a_pushed_branchs_base_is_its_remotes_master(
     assert [e["area"] for e in areas(repo)] == [["src/p.cpp", "tools/p.py"]]
 
 
+BENCH = "docs/benchmarks/2026-11-03/other-acceptance/run.json"
+
+
+def test_areas_a_probe_beside_a_branch_carrying_committed_benchmarks_passes(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    """2026-11-03: a branch's committed benchmark files are not its tester's to
+    write, and a probe writes only its own folder; neither refuses the other."""
+    commit_file(trees["A"], BENCH)
+    commit_file(trees["A"], "tests/test_x.py")
+    ok(repo, home, *area_brief(trees["B"], persona="perf"))
+    ok(repo, home, *area_brief(trees["A"], persona="tester"))
+    ok(repo, home, *area_brief(trees["B"], "docs/benchmarks/2026-11-03/probe/", persona="perf"))
+    assert len(areas(repo)) == 2
+
+
+def test_areas_two_writers_on_one_committed_file_are_refused(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    commit_file(trees["A"], "tests/test_x.py")
+    ok(repo, home, *area_brief(trees["A"], persona="tester"))
+    refused(repo, home, *area_brief(trees["B"], "tests/test_x.py"), says=f"{SAME}tests/test_x.py")
+    probe = "docs/benchmarks/2026-11-03/probe/"
+    ok(repo, home, *area_brief(trees["C"], probe, persona="perf"))
+    refused(repo, home, *area_brief(trees["B"], f"{probe}r.json", persona="perf"),
+            says=f"{SAME}{probe}r.json")  # fmt: skip
+
+
 # ---------------------------------------------------------------- settled results first
 
 
