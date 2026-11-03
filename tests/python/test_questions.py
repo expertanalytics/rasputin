@@ -30,7 +30,9 @@ NOW = datetime(2026, 10, 27, 18, 0, tzinfo=UTC)
 
 @pytest.fixture
 def store(tmp_path: Path) -> Path:
-    """The store path; its directory holds everything the tool writes."""
+    """The store path; its directory holds everything the tool writes, and a search
+    of the settled results run at `NOW`, which `add` requires."""
+    harness_fixtures.searched(tmp_path / "common", NOW)
     return tmp_path / "common" / "questions.jsonl"
 
 
