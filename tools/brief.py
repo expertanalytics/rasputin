@@ -24,10 +24,11 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent))  # appended: the stdlib wins (h16 G4)
+import findings  # beside this file
 import session_state  # beside this file, as the hooks import it
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -302,6 +303,7 @@ def _brief(argv: list[str] | None) -> str:
     parser.add_argument("--lane", choices=("fast",))  # h34 §3: test and fix by one developer
     parser.add_argument("--item", default="")  # pipe 3.6: the pipe item a writer works on
     parser.add_argument("--area", nargs="+", default=[])  # narrows the write limit
+    parser.add_argument("--probe", action="store_true")  # a probe: settled results first
     args = parser.parse_args(argv)
     persona, fast = args.persona, args.lane == "fast"
     if persona not in PERSONAS:
@@ -339,6 +341,9 @@ def _brief(argv: list[str] | None) -> str:
         if not any(_inside(path, p) for p in prefixes):
             raise BriefError(f"--area {path} is outside the write limit")
     store, running = _running(worktree)
+    unsearched = findings.unsearched(store.with_name(findings.SEARCHES), datetime.now(UTC))
+    if (persona == "architect" or args.probe) and unsearched:
+        raise BriefError(unsearched)
     declared = args.area or prefixes
     mine = {"persona": persona, "worktree": str(worktree), "item": args.item,
             "branch": _git(worktree, "rev-parse", "--abbrev-ref", "HEAD") or "", "note": str(note),
