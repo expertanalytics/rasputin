@@ -6,10 +6,14 @@ Spec: docs/increments/h9-spawn-briefs.md §3.1 to §3.4. The main session runs
     python3 tools/brief.py <persona> --worktree <path> --beside <none|persona:path>...
                            [--increment <file>] [--no-build] [--untimed] [--ola <text>]...
                            [--lane fast] [--item <id>] [--area <path>...]
+    python3 tools/brief.py stage <worktree> timed|untimed
 
 and pastes the block, unchanged, before the task. `.claude/hooks/guard_spawn.py`
 reads it back with `find_blocks` and `check`, so the format has one owner. A
 refusal is exit 2 with the reason on stderr and no block.
+
+The second form is @perf's mark at a stage boundary, on its areas.json entry; a
+brief beside a running @perf reads it, and an entry without one counts as timed.
 """
 
 from __future__ import annotations
@@ -206,10 +210,12 @@ def _overlap(mine: dict[str, str | list[str]], running: list[dict[str, str | lis
 
 
 def _concurrency(persona: str, worktree: Path, beside: list[str], no_build: bool,
-                 untimed: bool = False, running: Sequence[str] = ()) -> str:  # fmt: skip
-    """§3.1a: the generated line, or a refusal naming the rule."""
-    if untimed and persona != "perf" and not any(e.partition(":")[0] == "perf" for e in beside):
-        raise BriefError("--untimed marks a @perf run")
+                 untimed: bool = False, running: Sequence[str] = (),
+                 quiet: Sequence[str] = ()) -> str:  # fmt: skip
+    """§3.1a: the generated line, or a refusal naming the rule. `quiet`: the
+    worktrees of running @perf entries marked untimed."""
+    if untimed and persona != "perf":
+        raise BriefError("--untimed marks a @perf brief; a running @perf marks its own stage")
     too_many = BriefError("at most three writers run at once")
     if WRITES[persona] and len({str(worktree), *running}) > MAX_WRITERS:
         raise too_many
@@ -227,10 +233,12 @@ def _concurrency(persona: str, worktree: Path, beside: list[str], no_build: bool
             )
         others.append((name, _checkout(place)))
     everyone = [(persona, worktree), *others]
+    perfs = {str(place) for name, place in others if name == "perf"}
+    untimed = untimed or (persona != "perf" and bool(perfs) and perfs <= set(quiet))
     if any(name == "perf" for name, _ in everyone) and not untimed:
         raise BriefError(
             "nothing runs beside a timing run (@perf), read-only agents included; "
-            "brief its untimed stages with --untimed"
+            "brief its untimed stages with --untimed, or mark them with brief.py stage"
         )
     writers = [place for name, place in everyone if WRITES[name]]
     if len({*map(str, writers), *running}) > MAX_WRITERS:
@@ -241,7 +249,7 @@ def _concurrency(persona: str, worktree: Path, beside: list[str], no_build: bool
         if not WRITES[who] and where in writers:
             raise BriefError(f"@{who} is read-only and shares {where} with a writer")
     kinds = {name: "writer" if WRITES[name] else "read-only" for name, _ in others}
-    if untimed:
+    if untimed and perfs:
         kinds["perf"] = "writer, untimed run"
     listed = ", ".join(f"@{name} ({kinds[name]}, in {place})" for name, place in others)
     build = "You may not build C++ in this run." if no_build else "You may build C++ in this run."
@@ -249,6 +257,26 @@ def _concurrency(persona: str, worktree: Path, beside: list[str], no_build: bool
     return (f"Concurrency: also running: {listed}. At most three writers run at once; read-only "
             "agents do not count toward the three, as long as no writer changes the files they "
             f"read.{tail}\n{build}")  # fmt: skip
+
+
+def _save(store: Path, entries: list[dict[str, str | list[str]]]) -> None:
+    temporary = store.with_name(f"areas.json.{os.getpid()}")
+    temporary.write_text(json.dumps(entries, indent=1))
+    temporary.replace(store)
+
+
+def _stage(argv: list[str]) -> str:
+    """`stage <worktree> timed|untimed`: the running @perf's mark on its entry."""
+    if len(argv) != 2 or argv[1] not in ("timed", "untimed"):
+        raise BriefError("usage: brief.py stage <worktree> timed|untimed")
+    worktree = _checkout(argv[0])
+    store, running = _running(worktree)
+    mine = [e for e in json.loads(store.read_text()) if e["worktree"] == str(worktree)] \
+        if store.is_file() else []  # fmt: skip
+    if not any(e["persona"] == "perf" for e in mine):
+        raise BriefError(f"no running @perf in {worktree}")
+    _save(store, [*running, *({**e, "timed": argv[1]} for e in mine)])
+    return f"@perf in {worktree}: {argv[1]}\n"
 
 
 def _from_increment(path: Path, shown: str) -> list[str]:
@@ -348,11 +376,14 @@ def _brief(argv: list[str] | None) -> str:
     mine = {"persona": persona, "worktree": str(worktree), "item": args.item,
             "branch": _git(worktree, "rev-parse", "--abbrev-ref", "HEAD") or "", "note": str(note),
             "declared": declared, "area": sorted(_area(str(worktree), declared))}  # fmt: skip
+    if persona == "perf":
+        mine["timed"] = "untimed" if args.untimed else "timed"
     if WRITES[persona]:
         _overlap(mine, running)
     limit = ", ".join(limits) or "nothing"
+    quiet = [str(e["worktree"]) for e in running if e.get("timed") == "untimed"]
     body = [fixed, _concurrency(persona, worktree, args.beside, args.no_build, args.untimed,
-                                [str(e["worktree"]) for e in running]),
+                                [str(e["worktree"]) for e in running], quiet),
             f"Write limit: {limit}, and your note file.", *parts]  # fmt: skip
     if persona == "reviewer":
         body.insert(3, REVIEW_LINE)
@@ -363,16 +394,15 @@ def _brief(argv: list[str] | None) -> str:
     if WRITES[persona]:  # pipe 3.6: the note file marks the writer live until it is deleted
         note.parent.mkdir(parents=True, exist_ok=True)
         note.write_text(f"persona: @{persona}; made by tools/brief.py, yours to overwrite\n")
-        temporary = store.with_name(f"areas.json.{os.getpid()}")
-        temporary.write_text(json.dumps([*running, mine], indent=1))
-        temporary.replace(store)
+        _save(store, [*running, mine])
     return f"<<<BRIEF persona={persona} worktree={worktree} head={head} hash={digest}>>>\n" \
            f"{text}\n<<<END BRIEF {digest}>>>\n"  # fmt: skip
 
 
 def main(argv: list[str] | None = None) -> int:
     try:
-        sys.stdout.write(_brief(argv))
+        given = sys.argv[1:] if argv is None else argv
+        sys.stdout.write(_stage(given[1:]) if given[:1] == ["stage"] else _brief(given))
     except BriefError as exc:
         print(f"brief.py: {exc}", file=sys.stderr)
         return 2
