@@ -1,24 +1,28 @@
 # Increment 137: each triangle's DEM height histogram in the mesh file
 
-Status: **designed, revised twice** (`@architect`, 2026-11-04, on public
-master `98fe80c3`; branch of worktree `dem-stats`). The design review of
-`6f0e20df` returned CHANGES REQUESTED: its 50-node threshold left 72 % of
-Bygdin's triangles without a histogram. The first revision weights each DEM
-pixel by its exact overlap with the triangle (the main session's ruling
-between the two reviewers' fixes) and reads a reprojected DEM's own pixels.
-The second follows Ola's ruling on the classes (2026-11-04: "The range must
-depend on the DEM vtol", vtol being `--tolerance`): the classes are a tenth
-of the tolerance wide (3.1), and so a pixel's residual is taken at its
-centre, the point the tolerance bounds (3.2, section 2). Full lane: a
-per-triangle number a downstream reader takes as input, wrong without a
-crash if the overlap or the plane is wrong. New C++ lives in
-`include/terrain/statistics/`; `include/terrain/land_cover/overlap.hpp` is
-refactored so both uses share one clip; nothing under
-`include/terrain/refinement/` or `include/terrain/mesh/` changes and the
-refine path is unchanged with the option off, so no `@perf` acceptance run
-is required (`docs/increments/README.md`, *Acceptance*); section 8 asks for
-timings, reported and not gated (`perf.md` section 4, an option off by
-default).
+Status: **designed, revised three times** (`@architect`, 2026-11-04, on
+public master `98fe80c3`; branch of worktree `dem-stats`). The design
+review of `6f0e20df` returned CHANGES REQUESTED: its 50-node threshold left
+72 % of Bygdin's triangles without a histogram. The first revision weights
+each DEM pixel by its exact overlap with the triangle and reads a
+reprojected DEM's own pixels. The second tied the classes to the tolerance
+(Ola, 2026-11-04: "The range must depend on the DEM vtol") by a fixed count
+of 23, a tenth of the tolerance wide. Ola rejected that ("You can't be
+serious that on a 1m vtol mesh, you propose 23 buckets": 0.1 m classes are
+finer than the DEM's own accuracy) and ruled the count per triangle ("We
+need less statistical buckets the smaller the triangle is. So this should
+also converge"). The third, this one: classes as wide as the DEM's
+published vertical accuracy (3.1), and each triangle carries only the
+classes its own DEM nodes reach, so the count shrinks to one as the mesh
+refines (3.2, invariant 9). Full lane: a per-triangle number a downstream
+reader takes as input, wrong without a crash if the overlap or the plane is
+wrong. New C++ lives in `include/terrain/statistics/`;
+`include/terrain/land_cover/overlap.hpp` is refactored so both uses share
+one clip; nothing under `include/terrain/refinement/` or
+`include/terrain/mesh/` changes and the refine path is unchanged with the
+option off, so no `@perf` acceptance run is required
+(`docs/increments/README.md`, *Acceptance*); section 8 asks for timings,
+reported and not gated (`perf.md` section 4, an option off by default).
 
 ## 0. The plain picture
 
@@ -26,31 +30,38 @@ default).
   through its three corner heights.
 - **After**, `rasputin mesh --dem-heights` writes, for each triangle, the
   share of its area at each height above or below the triangle's own
-  plane (Ola, 2026-11-04: "Cell stats: means simply histogramming"): 23
-  classes, each a tenth of the run's tolerance wide, centred on 0, ±s, …,
-  ±10 s with s = tolerance / 10, so the inner classes span the tolerance
-  and half a class past it; the two end classes are open. At `--tolerance
-  10` that is 1 m classes from −10.5 to +10.5 m; at `--tolerance 1`,
-  0.1 m classes. Plus the share of its area over NoData. Each DEM pixel
-  counts with its exact area inside the triangle, so every triangle gets a
-  histogram, however small, and the 24 numbers sum to 1. A reprojected or
-  geographic DEM is read on its own pixels, not on the resampled grid. The
-  file states its class edges. Without the option every file is byte for
-  byte today's.
+  plane (Ola, 2026-11-04: "Cell stats: means simply histogramming"), in
+  classes of one fixed height width w: the DEM's published vertical
+  accuracy (1 m for DTM10, 6.79 m for ANADEM), else 1 m. Classes are
+  centred on 0 (…, −w, 0, +w, …). A triangle carries only the run of
+  classes from the lowest to the highest that its own DEM nodes fall in:
+  one class when its ground is within ±w/2 of its plane. Finer meshes
+  have smaller residuals and so fewer classes; once the tolerance is below
+  w/2 every triangle has one. The tolerance caps the count: at most
+  2n + 1 classes, n the least whole number with (n + ½) w > tolerance
+  (3 at tolerance 1 m and w = 1 m, 21 at 10 m). Plus the share over
+  NoData. Each pixel counts with its exact area inside the triangle; the
+  shares and the NoData share sum to 1. The file states the class edges
+  and, per triangle, where its classes start and how many there are.
+  Without the option every file is byte for byte today's.
 
 ```
  mesh as written (Trimmed: x, y, written z, in the mesh's CRS)
  DEM windows (SourceWindows: the tile, or the source DEM on the reprojected path)
+ class width w (the DEM source's vertical_accuracy_m, else 1 m) and tolerance
         |
         v  [Python, dem_heights.height_shares]
- corners -> the DEM's index space (reprojected first when the CRSs differ),
- per chunk: the window under its corners, the area of one pixel per row;
- class width s = tolerance / 10
+ n = half_count(tolerance, w); corners -> the DEM's index space (reprojected
+ first when the CRSs differ); per chunk: the window under its corners, row areas
         |
-        v  [C++, _core.dem_height_shares]
+        v  [C++, _core.dem_height_shares(…, class_m=w, half=n)]
  per triangle: clip to each pixel -> piece area
-   -> residual z_pixel - plane(pixel centre) -> class of width s; NoData -> its own share
-   -> shares (T, 23) float32, nodata (T,) float32
+   -> residual z_pixel - plane(pixel centre) -> class k, |k| <= n
+   -> the span [lo, hi] of the classes of the nodes it holds; other pieces fold to the nearer end
+   -> its shares (hi - lo + 1 floats), first class, NoData share
+        |
+        v
+ sparse table: offsets (T+1), first (T), shares (S), nodata (T), edges (2n+2)
         |
         v
  write_vtk / write_ply / write_triangles  (stable names, section 3.6)
@@ -66,28 +77,50 @@ level, so it holds the relief the mesh smooths away. Sub-grid elevation
 classes per coarse cell, as fractions of the cell's area, are the
 established way to hand sub-grid relief to a coarse grid (Leung and Ghan
 1995, *A subgrid parameterization of orographic precipitation*, Theor.
-Appl. Climatol. 52: 95-118, doi 10.1007/BF00865510); they use absolute
-elevation bands, this uses bands of height above the plane, as wide as a
-tenth of the mesh's tolerance, because the plane already carries the
-triangle's mean height and tilt and the tolerance bounds what is left. The weights
-are the exact overlap of each pixel with the triangle, the construction of
-conservative remapping and of `exactextract`'s coverage fractions, by the
-clip of Sutherland and Hodgman 1974 (*Reentrant polygon clipping*, CACM
-17(1): 32-42), all cited and compared in `26-land-cover.md` section 1 for
-`overlap.hpp`, which this reuses. **Departures:** (a) a pixel's height
-counts with its exact piece area, but (b) its residual is taken at the
-pixel centre, the DEM node, against the triangle's plane, for every piece
-of the pixel: that is the point the tolerance bounds, so like is compared
-with like (the pixel's value and the plane's mean over the pixel's square).
-For a cut pixel whose centre lies outside the triangle the plane is
-extrapolated by at most 0.71 pixel; section 2 measures how much area that
-puts past the tolerance. The piece centroid, the first revision's choice,
-adds a staircase term of up to slope × 0.71 pixel that the tolerance does
-not scale, and fills the open classes at small tolerances (section 2);
-(c) on the reprojected path the triangle is carried into the source's index
-space by its corners, with straight edges, and its plane by barycentric
-weights, which assumes the map is affine across one triangle (section 2
-measures the error). No novelty is claimed; none searched.
+Appl. Climatol. 52: 95-118, doi 10.1007/BF00865510); they use a fixed set
+of absolute elevation bands per cell. This uses bands of height above the
+plane, one fixed width for the run, and per triangle only the bands its
+relief reaches. The weights are the exact overlap of each pixel with the
+triangle, the construction of conservative remapping and of
+`exactextract`'s coverage fractions, by the clip of Sutherland and Hodgman
+1974 (*Reentrant polygon clipping*, CACM 17(1): 32-42), all cited and
+compared in `26-land-cover.md` section 1 for `overlap.hpp`, which this
+reuses. The sparse table per triangle is the compressed-row layout the
+land-cover fractions already use (`ClassFractions`, `io/models.py`).
+
+*The width.* A class narrower than the DEM's error resolves noise, so the
+width is the error the DEM's distributor publishes, as one standard
+deviation in metres:
+
+- **Kartverket DTM10**: "± 1 meter standardavvik i høyde i områder
+  etablert i NDH" (± 1 m standard deviation in areas established in the
+  national detailed height model), "± 2 til 6 meter standardavvik i høyde
+  i områder som ikke er etablert i NDH ennå" (data.norge.no, *DTM 10
+  Terrengmodell UTM33 2021*, read 2026-11-04). The current DTM10 is made
+  from hoydedata.no's laser model, so **1 m**.
+- **ANADEM**: against ICESat-2, bias 1.50 m, RMSE 6.99 m, **standard
+  deviation 6.79 m** (Laipelt et al. 2024, *Remote Sens.* 16(13): 2321,
+  Table 3; read in full in `docs/research/anadem-accuracy.md`). It
+  publishes no relative (point-to-point) accuracy (section 10).
+- **Copernicus GLO-30**: absolute vertical accuracy < 4 m LE90 (Product
+  Handbook v5.0, section 2.1), so 4 / 1.645 = **2.43 m** as a standard
+  deviation for normal errors (the conversion is ours).
+- **Anything else**: 1 m, the DTM10 figure, the finest product the
+  pipeline meshes.
+
+**Departures:** (a) a pixel's height counts with its exact piece area, but
+(b) its residual is taken at the pixel centre, the DEM node, against the
+triangle's plane, for every piece of the pixel: that is the point the
+tolerance bounds. (c) A triangle's classes span only the classes of the
+nodes it **holds** (centres inside it or on its edges); a piece of a pixel
+centred outside it, whose residual extrapolates the plane by up to 0.71
+pixel, counts in the nearer end class of that span. Without (c) such pieces
+add a class to 29-70 % of the fixture's land triangles and stop the count
+from converging (section 2); (c) moves 0.1-0.7 % of the land area by one
+class or more. (d) On the reprojected path the triangle is carried into the
+source's index space by its corners, with straight edges, and its plane by
+barycentric weights, which assumes the map is affine across one triangle
+(section 2 measures the error). No novelty is claimed; none searched.
 
 *Legacy.* `git grep -n -i -E "hist|hypso|rough" legacy-archive -- legacy`
 finds no per-triangle DEM statistic; `legacy/rasputin/writer.py` wrote named
@@ -97,19 +130,21 @@ is a named cell array of the mesh file.
 *Ideas file.* Takes up the "carry each triangle's sub-grid distribution"
 candidate of "A terrain mesh that follows the physics, not only the height"
 (heights only; slope and aspect not). Overlaps "A real storage format for
-meshes" (24 more numbers per cell for its reader to carry) and "Mean, RMS
+meshes" (a sparse per-cell table for its reader to carry) and "Mean, RMS
 and percentiles of the vertical error in --stats" (the histogram gives a
 triangle's mean signed misfit to within half a class); takes up neither.
 
 ## 2. Measured
 
-Scratch probes on master `98fe80c3`, M1 Max on mains power, a C++ probe
-built on `overlap.hpp`'s clip with `-O3` and the build's hardening, and an
-exact `Fraction` oracle for the test figures. The first revision's figures
-(Bygdin, cost, resampled grid) were taken with 1 m classes and the piece
-centroid; the second revision's (classes against the tolerance, resolution,
-Velhas at 3.1's classes) are marked so. Probes of the second revision:
-`rasputin_scratch/arch137-range`.
+Scratch probes on master `98fe80c3`, M1 Max on mains power, C++ probes
+built on `overlap.hpp`'s clip with `-O3`, and an exact `Fraction` oracle
+for the test figures. The first revision's figures (Bygdin, cost, resampled
+grid) were taken with 1 m classes and the piece centroid, and stand for the
+weights and the cost. The third revision's (marked so) are in
+`rasputin_scratch/arch137-classes` (`span.cpp`, `span2.cpp`, `an2.py`,
+`an3.py`, `t8.py`, `mk.py`); they weight each piece by its index area
+(equal row areas), which on Velhas changes no figure by more than 5e-4
+relative.
 
 **Residuals at the nodes.** `tests/fixtures/dem_archive/7908_3_10m_z33.tif`
 (5,051 × 5,051 nodes, 10 m, EPSG:25833, 95 % sea at exactly 0 m), land
@@ -140,40 +175,59 @@ against the overlap histogram:
 | 10 | 13.7 ms | 16.4 ms | 1.2 |
 | 1 | 75.0 ms | 117 ms | 1.56 |
 
-Peak resident memory 40 MB and 39 MB: the inputs; the walk allocates 23
-doubles per thread and writes 96 bytes per triangle. On the São Francisco
+Peak resident memory 40 MB and 39 MB: the inputs. On the São Francisco
 piece below (1,858,576 triangles, 30.9 M nodes, 10 threads): 0.42-0.47 s
 against 0.35-0.46 s, and reprojecting its 933,232 vertices 0.05 s.
 
-**Classes against the tolerance** (second revision). The fixture of the
-first table, land triangles, area-weighted; "open" is the area in the two
-open classes, "used" the classes holding at least 1 % of the area:
+**Classes per triangle** (third revision). The 7908 fixture, w = 1 m (its
+DEM is a path: no source entry), classes by the span of held nodes
+(departure c). "One" is the share of triangles with one class; "mean" the
+mean count, per triangle and weighted by plan area; "folded" the area moved
+by departure (c):
 
-| `--tolerance` | median triangle, pixels | s = tol/10, centre: open / used | s = tol/10, centroid: open / used | 1 m, centre: open / used |
-|---|---|---|---|---|
-| 1 | 1.0 | 0.72 % / 17 | 15.7 % / 21 | 0.00 % / 3 |
-| 5 | 3.0 | 0.12 % / 15 | 0.83 % / 15 | 0.01 % / 9 |
-| 10 | 6.5 | 0.04 % / 14 | 0.13 % / 14 | 0.04 % / 14 |
-| 20 | 25.5 | 0.01 % / 14 | 0.01 % / 14 | 7.43 % / 23 |
+| `--tolerance` | n, bound 2n+1 | triangles, land | land: one | land: mean (area-weighted) | largest | all: one | all: mean (area-weighted) | land folded |
+|---|---|---|---|---|---|---|---|---|
+| 20 | 20, 41 | 50,147, 10,904 | 2.7 % | 15.07 (15.79) | 40 | 78.5 % | 4.08 (1.71) | 0.11 % |
+| 10 | 10, 21 | 69,571, 30,068 | 8.9 % | 7.41 (9.12) | 21 | 60.3 % | 3.79 (1.38) | 0.23 % |
+| 5 | 5, 11 | 116,389, 76,263 | 19.5 % | 3.78 (5.14) | 11 | 46.9 % | 2.83 (1.19) | 0.40 % |
+| 2 | 2, 5 | 261,221, 219,199 | 41.4 % | 1.88 (2.49) | 5 | 50.6 % | 1.74 (1.06) | 0.64 % |
+| 1 | 1, 3 | 464,290, 419,922 | 69.6 % | 1.33 (1.63) | 3 | 72.4 % | 1.30 (1.03) | 0.70 % |
 
-Fixed 1 m classes put 83 % of the area in class 0 at `--tolerance 1` and
-7.4 % in the open classes at 20; classes a tenth of the tolerance wide use
-14-17 classes at every tolerance. With the residual at the piece centroid,
-15.7 % of the area at `--tolerance 1` lies past ±1.05 m although every node
-is within 1 m: in triangles of under one pixel the median triangle has 75 %
-of its area there, the slope across the part of a pixel between its centre
-and the piece. At the pixel centre 0.72 %. On Velhas at `--tolerance 5`
-(s = 0.5 m) the open classes hold 0.19 % (centroid) and 0.07 % (centre).
-**Centroid or pixel centre** in the first revision, Bygdin, 1 m classes,
-the distance between the two histograms (total variation: half the sum of
-absolute differences; 0 equal, 1 disjoint), median by plan area in
+On land both measures move monotonically to 1, as do the means over all
+triangles. The one-class share over all triangles does not (78.5 → 46.9 →
+72.4 %): sea triangles always have one class and are 78 % of the triangles
+at 20 and 10 % at 1, a change of mix, not of any triangle. With the span
+over **all** pieces instead (no departure c), the land figures are 1.6,
+5.9, 14.1, 30.5, 51.3 % one class and means 19.43, 10.47, 5.53, 2.64,
+1.73: pieces centred outside raise the count of 69.8, 67.1, 57.9, 41.4 and
+29.0 % of land triangles. Every triangle holds a node here (its corners lie
+on nodes).
+
+`pieces_fixtures.hills(n=201)` (10 m, uniform noise 0-3 m on smooth hills),
+`--stride 200`, w = 1 m: at `--tolerance` 8, 4, 2, 1, 0.4: 552, 1,546,
+11,279, 42,457, 65,379 triangles; one class 0.7, 0.6, 20.6, 73.1, 100.0 %;
+mean 7.783, 4.875, 2.492, 1.283, 1.000; largest 16, 9, 5, 3, 1 (bounds 17,
+9, 5, 3, 1); folded 0.17-1.23 %. The span over all pieces gives 96.0 % and
+1.042 at 0.4: it does not converge. Each run 0.4 s.
+
+Velhas (`tests/fixtures/velhas`, ANADEM, `--out-crs EPSG:31983 --tolerance
+5`, 969 triangles, source pixels): at w = 1 m, 11.7 % one class, mean 3.99,
+largest 10 (bound 11), folded 1.42 %; at w = 6.79 m (ANADEM's), n = 1,
+73.9 % one class, mean 1.26, largest 3, folded 0.23 %. 22 of its triangles
+hold no source node (corners are not source nodes on this path).
+
+**Centroid or pixel centre** (second revision, fixture, classes a tenth of
+the tolerance): with the residual at the piece centroid, 15.7 % of the land
+area at `--tolerance 1` lies past ±1.05 m although every node is within
+1 m; at the pixel centre 0.72 %. Bygdin, 1 m classes, the two histograms'
+distance (half the sum of absolute differences), median by plan area in
 pixels: under 1, 1.00; 1-4, 0.70; 4-16, 0.29; 16-50, 0.10; 50 and over,
-0.03; the share outside class 0 moved from 78.8 % to 78.1 %.
+0.03.
 
 **Resampled grid or the source's pixels.** The reprojected path refines
 against a bilinearly resampled grid. Histograms from it against histograms
 from the source's own pixels (the nodes `final_check.stored` files), same
-mesh, area-weighted over triangles:
+mesh, area-weighted over triangles (first revision, 1 m classes, centroid):
 
 | fixture | triangles | distance | spread, resampled / source | class-0 share, resampled / source | resampled narrower in |
 |---|---|---|---|---|---|
@@ -181,92 +235,91 @@ mesh, area-weighted over triangles:
 | same, `--tolerance 5` | 969 | 0.15 | 1.219 / 1.289 m | 0.225 / 0.213 | 70 % |
 | São Francisco piece `bho2017_5k_76949_anadem_window_epsg4674.tif`, `--tolerance 5` | 1,858,576 | 0.24 | 1.347 / 1.463 m | 0.216 / 0.194 | 68 % |
 
-(Spread: the standard deviation of the class, in metres.) The sign is the
-smoothing's: the resampled histograms are narrower, by 4-8 % in spread,
-with more area in class 0; the mean class is unchanged (0.116 m both on
-the São Francisco piece). **The faithful path is chosen** (3.5).
-Departure (c) measured on Velhas: a triangle's centroid mapped to the
-source's index space lies at most 1.2e-3 m (`--tolerance 1`, edges up to
-474 m) and 3.7e-3 m (`--tolerance 5`, up to 849 m) from the mean of its
-mapped corners.
+(Spread: the standard deviation of the class, in metres.) The resampled
+histograms are narrower, with more area in class 0. **The faithful path is
+chosen** (3.5). Third revision, Velhas at `--tolerance 5`, w = 1 m, pixel
+centre, span rule, each triangle's own spread (the standard deviation of
+its class centres k·w) weighted by plan area: 1.164 m from the source's
+pixels, 1.121 m from the resampled grid; class-0 share 0.228 and 0.262.
+Departure (d) measured on Velhas: a triangle's centroid mapped to the
+source's index space lies at most 1.2e-3 m (`--tolerance 1`) and 3.7e-3 m
+(`--tolerance 5`) from the mean of its mapped corners.
 
 **Resolution.** z = 3 sin(2πx/400) cos(2πy/300) m on [0, 1000]² m, 32
-triangles of a 250 m grid, 1 m classes: overlap histograms from a 10 m and
-a 5 m DEM differ by 0.012 (median) and 0.018 (largest) with the residual at
-the pixel centre (second revision; 0.011 and 0.017 at the centroid).
-Velhas at `--tolerance 5` with 3.1's classes (s = 0.5 m, pixel centre),
-969 triangles, each triangle's own spread (the standard deviation of its
-class centres k·s, open classes at ±11 s) weighted by its plan area:
-1.212 m from the source's pixels, 1.141 m from the resampled grid; class-0
-share 0.118 and 0.148 (second revision; the first table's 1.289 / 1.219 m
-and 0.213 / 0.225 are 1 m classes at the centroid, reproduced by the same
-probe). Node-count histograms on the
-fixture, 10 m against its 20 m block mean, differed by a median of 0.04-0.09
-at 49-99 nodes and 1.5-2.0 times that with 0.5 m classes (commit
-`6f0e20df`, section 2); the first revision's width argument; 3.1 now sets the width by the tolerance.
+triangles of a 250 m grid, w = 1 m, n = 10: overlap histograms from a 10 m
+and a 5 m DEM differ by 0.012 (median) and 0.018 (largest), classes −5 …
++5 occur, and every triangle has the same count from both (5-8; third
+revision, span rule).
 
 ## 3. Design
 
 ### 3.1 The classes
 
-The run's tolerance τ (metres) sets the class width s = τ / 10 (one
-quotient in double). Class k, for k = −11 … +11, holds the residual r
-(metres) with e(k − 1) ≤ r < e(k), where e(j) = (j + ½) · s is one product
-in double; class −11 is r < e(−11) = −10.5 s, class +11 is r ≥ e(10) =
-10.5 s. Index k + 11 in every array (0 … 22). C++ and Python form the 22
-edges e(−11) … e(10) by the same two operations, so the class of r is
-exact against the edges the file states. At τ = 10, s = 1 and the edges
-are −10.5 … +10.5 exactly. Why:
+The width w (metres) is the DEM source's `vertical_accuracy_m`, else
+`DEFAULT_CLASS_M` = 1.0. Class k holds the residual r (metres) with
+(k − ½) · w ≤ r < (k + ½) · w; each bound is one product in double. The
+run's n is the least whole number ≥ 0 with (n + ½) · w > τ (τ the
+tolerance, below), computed as `floor(τ / w + ½)` raised while
+(n + ½) · w ≤ τ. Every class index is clamped to −n … n; index c = k + n
+(0 … 2n) in every array. The run's 2n + 2 edges are (j + ½) · w,
+j = −n − 1 … n, formed by the same product in C++ and Python, so the class
+of r is exact against the edges the file states. At w = 1 m: n = 1 at
+τ = 1 (edges ±0.5, ±1.5), n = 10 at τ = 10 (edges −10.5 … +10.5, the
+reviewed design's), n = 0 below τ = 0.5. Why:
 
+- **The width is the DEM's, not the tolerance's** (Ola's second ruling). A
+  class narrower than the DEM's own error splits noise; the width is the
+  distributor's published figure (section 1). **No user override**: the
+  width is a property of the DEM product, stated once where the product
+  is registered, so two meshes of one DEM always share their classes and
+  no run tunes it. A DEM given by path, or registered without the field,
+  takes 1 m, and the run record says so; a user with a DEM of known
+  accuracy registers it with `vertical_accuracy_m` in their sources file
+  (`sources.py` already reads local entries). Python resolves the source
+  and passes the core two numbers, `class_m` and `half`: no key, path or
+  CRS crosses.
 - **Centred on 0.** Flat ground under a flat triangle (water, the sea of
-  section 2) gives residuals of exactly 0 or rounding noise about 0; a class
-  edge at 0 would split that noise between two classes. Centred, it lies in
-  class 0.
-- **The range follows the tolerance** (Ola's ruling). Every DEM node inside
-  a tolerance mesh is within τ of it, and the largest is τ to 4 digits
-  (section 2's first table), so the residual at a pixel centre inside the
-  triangle is within τ. The inner classes reach half a class past it
-  (±1.05 τ): the classes k·s ± s/2 are centred for every k, as class 0 is,
-  so the nodes the refinement leaves at τ lie mid-class ±10, not on an
-  edge where the last bit of z would choose between an inner and an open
-  class. No wider margin: past it lie only cut pixels whose centre is
-  outside the triangle, 0.72 % of the land area at τ = 1 and 0.04 % at 10
-  (section 2), which the open classes count.
-- **A fixed count, so the width scales.** The refinement stops once the
-  residual is within τ, so the residual's spread scales with τ: classes
-  a tenth of τ wide use 14-17 classes at τ = 1 … 20, where fixed 1 m
-  classes use 3 at τ = 1 (83 % in class 0) and spill 7.4 % into the open
-  classes at 20 (section 2). The count adds no parameter: it is the
-  reviewed design's 23 classes, and at τ = 10, where Bygdin was measured,
-  the classes are the reviewed design's 1 m classes byte for byte. A fixed
-  count also keeps every array (T, 23) at every tolerance.
-- **Per run, stated in the file.** Meshes at different tolerances have
-  different edges, and a class index means k · s only with the file's s.
-  The edges are written into every file (3.6); a reader reads them, never
-  assumes them, and a reader comparing two meshes re-bins by their edges.
-  The open classes have no stated width; a reader that needs one takes s,
-  which the edges give.
+  section 2) gives residuals of exactly 0 or rounding noise about 0; centred,
+  it lies in one class.
+- **The count per triangle** (Ola's third ruling). Each triangle carries
+  the classes lo … hi of the non-NoData nodes it holds (departure c),
+  where every residual is within τ, so |k| ≤ n by the margin (n + ½) w >
+  τ: the bound 2n + 1 holds by construction, without open end classes.
+  The strict margin keeps a node at exactly τ inside: at τ = 2.5, w = 1,
+  n = 3, not 2. A triangle holding no node (a feature vertex or a
+  reprojected corner off the nodes; 22 of Velhas's 969) has one class, the
+  class of its area-weighted mean residual clamped to ±n: it carries no
+  node the tolerance checked, so nothing supports a spread. Inside a span
+  a class may hold 0.
+- **Convergence** (invariant 9). Below τ = w/2, n = 0 and every triangle
+  with data has one class. Above it the count follows the triangle's own
+  relief, and section 2 measures it falling toward 1 as τ falls.
+- **The degenerate run does not collapse further.** At n = 0 every
+  triangle still writes its one share and its NoData share: readers meet
+  one layout at every tolerance, and the NoData share is still
+  information. 12 bytes per triangle more than nothing.
+- **Per run, stated in the file.** The edges and w are written into every
+  file (3.6); a reader reads them, never assumes them.
 
 **τ for each kind of run.** `--tolerance T`: τ = T. `--triangles N`: the
 tolerance the search chose and the run record states (`tolerance_m`; a
 floor answer is stated at the floor's largest error, which bounds every
-node). `--tolerance-near` and `--tolerance-slope` lower the tolerance
-locally and never raise it (the CLI refuses an N above `--tolerance`), so
-`--tolerance` bounds every node and τ is it: one set of classes per run,
-narrower residuals near lines and on steep ground. A cut run refines every
-piece and seam at one `--tolerance`, so every piece file states the same
-edges. Refused, before any work: `--dem-heights` without `--tolerance` or
-`--triangles` ("needs --tolerance or --triangles: the height classes are a
-tenth of the tolerance"), since a `--stride`-only mesh bounds nothing
-(195 m at `--stride 30`, section 2); and `--dem-heights` with `--tolerance 0`.
-Without the flag both run as today. A `--dem-heights` run under `--triangles`
-whose chosen tolerance is 0 (every node on the mesh) exits non-zero
-after the search, naming `--tolerance`. No run has a tolerance that varies
-upward, so none needs a second set of classes.
+node). `--tolerance-near` and `--tolerance-slope` only lower the tolerance
+locally, so `--tolerance` bounds every node and τ is it. A cut run refines
+every piece at one `--tolerance` against one source, so every piece file
+states the same edges. Refused, before any work: `--dem-heights` without
+`--tolerance` or `--triangles` ("needs --tolerance or --triangles: the
+tolerance bounds the height classes"), since a `--stride`-only mesh bounds
+nothing (195 m at `--stride 30`); `--dem-heights` with `--tolerance 0`;
+and n > `MAX_HALF` = 127 ("--tolerance 200 at class width 1 m needs 401
+height classes; at most 255"), since a `.ply` list holds at most 255. Under
+`--triangles` the last two are checked after the search, exiting non-zero
+and naming `--tolerance`. Without the flag all run as today.
 
-Constant scale: the count (10 per side) is scale-free; the edges are
-metres of height through τ, checked at τ = 1, 5, 10 and 20 on the 7908
-fixture and 5 on Velhas (section 2).
+Constant scale: `DEFAULT_CLASS_M` is metres of height, DTM10's published
+σ, checked at τ = 1 … 20 on the 7908 fixture; `MAX_HALF` is a count (the
+`.ply` `uchar` list), reached at τ ≥ 127.5 w; the held-node margin 1e-9
+(3.2) is index units, checked at 5,051 columns.
 
 ### 3.2 What a triangle covers
 
@@ -280,19 +333,20 @@ when it is not.
 
 Per triangle, `overlap.hpp`'s clip gives every pixel's piece inside it:
 whole interior pixels without a clip, cut pixels as polygons. Each piece
-has an area a (index units) times the row's pixel area A_row (m²:
-dx · dy projected, the ellipsoidal cell area of the row for a geographic
-DEM, `land_cover_fractions.row_areas`'s rule). Its residual is
-ρ = z_pixel − plane(c + ½, r + ½), at the pixel centre for every piece,
-whole or cut, with plane the affine function through the triangle's three
-corners in index space with their **written** z (so a piece's seam heights
-are the written ones). In the DEM's own CRS that is the triangle's plane;
-on the reprojected path it is the plane by barycentric weights (departure
-c), and the centre is a source node the final check held within τ. A
-centre inside the triangle is a node the refinement measured against this
-plane, so |r| ≤ τ there; a centre outside it (a cut pixel) extrapolates
-the plane by at most 0.71 pixel (departure b). A pixel the view's NoData
-names, or a NaN, adds its weight to the NoData share and to no class.
+has an area a (index units) times the row's pixel area A_row (m²: dx · dy
+projected, the ellipsoidal cell area of the row for a geographic DEM,
+`land_cover_fractions.row_areas`'s rule). Its residual is ρ = z_pixel −
+plane(c + ½, r + ½), at the pixel centre for every piece, with plane the
+affine function through the triangle's three corners in index space with
+their **written** z. A pixel the view's NoData names, or a NaN, adds its
+weight to the NoData share and to no class.
+
+A node is **held** by the triangle when each of its three edge functions,
+divided by its edge's length, is ≥ −1e-9 at the node (index units): inside
+or on an edge, with a margin for the rounding of a corner placed on a node
+(≤ 5,051 · 2⁻⁵² ≈ 1e-12 on the fixture). A node on a shared edge is held
+by both triangles; none is owned. In the DEM's own CRS a held node is one
+the refinement measured against this plane, so |ρ| ≤ τ there.
 
 No pixel is owned: a pixel cut by an edge gives each triangle its own
 piece, and the pieces of a pixel tile it to rounding, across piece seams
@@ -301,19 +355,17 @@ canonical order (`overlap.hpp`'s header).
 
 ### 3.3 The shares
 
-W = Σ a · A_row over the triangle's pieces. share_k = (weight in class k) /
-W and nodata = (weight on NoData) / W, each float32; the 23 shares and
-nodata sum to 1 within 24 · 2⁻²⁴ ≈ 1.4e-6 (a bound). W > 0 for every
-triangle of positive area inside the window, so every row is defined:
-**no threshold, no empty row**. A triangle whose pixels are all NoData has
-nodata = 1.0 and every share 0.0; the run record counts such triangles
-(`dem_height_triangles_without_data`, 3.6), and `--stats` shows the count.
-A reader wanting the heights of the valid part divides the shares by
-1 − nodata; a reader aggregating triangles weights each by its plan area
-times 1 − nodata.
-
-A triangle of a pixel or less has a one- or two-class histogram: that is
-what the DEM says at its resolution, not a defect.
+Per triangle, a local array of 2n + 1 doubles takes each piece's weight
+a · A_row at its class clamped to ±n; the held nodes' classes give lo and
+hi. Then the weights below lo are added to lo and those above hi to hi, in
+ascending class order, and the span lo … hi is the row. W = Σ a · A_row
+over all pieces, NoData included. share_i = (weight in class lo + i) / W
+and nodata = (weight on NoData) / W, each float32; a row's count + 1
+numbers sum to 1 within (count + 1) · 2⁻²⁴ (a bound; 2.5e-6 at 41). A
+triangle whose pixels are all NoData has count 0 and nodata 1.0; the run
+record counts such triangles (`dem_height_triangles_without_data`), and
+`--stats` shows the count. A reader wanting the heights of the valid part
+divides the shares by 1 − nodata.
 
 ### 3.4 The interfaces (`@tester` calls these)
 
@@ -321,34 +373,33 @@ what the DEM says at its resolution, not a defect.
 `detail::for_each_piece(tri, rows, cols, visit)`, calling
 `visit(r, c, const Polygon* piece)` with `nullptr` for a whole pixel;
 `class_areas` passes a visitor doing today's arithmetic in today's order,
-so its bytes do not change. A piece's area is `area_local`'s; no centroid
-is needed.
+so its bytes do not change.
 
 C++, `include/terrain/statistics/height_shares.hpp`, namespace
 `terrain::statistics`:
 
 ```cpp
-inline constexpr int half = 10;  // classes -half-1 ... half+1: 2*half + 3 = 23
-struct HeightShares { std::vector<float> shares; /* T*23 */ std::vector<float> nodata; /* T */ };
+struct HeightShares {
+    std::vector<std::uint32_t> offsets;  // T + 1: triangle t's shares are [offsets[t], offsets[t + 1])
+    std::vector<std::int32_t> first;     // T: class index (0 … 2·half) of t's first share; 0 when it has none
+    std::vector<float> shares;           // offsets[T]
+    std::vector<float> nodata;           // T
+};
 template <class T>  // float or double, the DEM's promoted dtype
 [[nodiscard]] HeightShares height_shares(std::span<const Point2> corners,  // 3 per triangle, index space
                                          std::span<const double> z,        // 3 per triangle, written
                                          const raster::RasterView<T>& dem, std::span<const double> row_area,
-                                         double step_m,                    // s = tolerance / 10, from Python
-                                         unsigned threads);
+                                         double class_m, int half, unsigned threads);
 ```
 
-The class of r: k = floor(r / s + ½), then lowered while r < (k − ½) · s
-and raised while r ≥ (k + ½) · s, then clamped to ±11, so it agrees with
-the edges e(j) = (j + ½) · s bit for bit (3.1).
-
-Per triangle: the canonical rotation `class_areas` applies (corners and
-their z together, so the vertex order changes nothing), the plane, the
-pieces, a local array of K + 1 doubles, then its row. One output row per
-triangle and no reduction, so the bytes do not depend on the thread count.
-Refusals, as `class_areas`'s and before any work: corner and z spans not 3
-per triangle, row_area not one per row, a non-finite corner or z, a
-step_m not finite and above 0, a zero-area triangle
+The class of ρ: k = floor(ρ / w + ½), lowered while ρ < (k − ½) · w and
+raised while ρ ≥ (k + ½) · w, then clamped to ±half. Per triangle: the
+canonical rotation `class_areas` applies (corners and their z together),
+the plane, the pieces, the local array, then its row. Rows go to per-block
+buffers concatenated in triangle order, so the bytes do not depend on the
+thread count. Refusals, before any work: corner and z spans not 3 per
+triangle, row_area not one per row, a non-finite corner or z, class_m not
+finite and above 0, half outside 0 … 127, a zero-area triangle
 (`std::invalid_argument`), a corner past the window
 (`land_cover::OutsideWindow`).
 
@@ -360,24 +411,29 @@ def dem_height_shares(corners: NDArray[float64],   # (T, 3, 2) index space of `d
                       z: NDArray[float64],         # (T, 3)
                       dem: NDArray[float32 | float64], nodata: float | None,  # (rows, cols)
                       row_area: NDArray[float64],  # (rows,)
-                      *, step_m: float, threads: int = 0) -> tuple[NDArray[float32], NDArray[float32]]: ...  # (T, 23), (T,)
+                      *, class_m: float, half: int, threads: int = 0,
+                      ) -> tuple[NDArray[uint32], NDArray[int32], NDArray[float32], NDArray[float32]]: ...
+                      # offsets (T+1,), first (T,), shares (S,), nodata (T,)
 ```
+
+`io/models.py` gains `HeightTable`, frozen, the `ClassFractions` pattern:
+`offsets` uint32 (T + 1), `first` int32 (T), `shares` float32 (S),
+`nodata` float32 (T), `edges_m` float64 (2n + 2), `class_m` float. Its
+validator refuses: another dtype or rank; offsets not starting at 0,
+decreasing, or ending other than at S; `first` or `nodata` not T long;
+edges fewer than 2, of odd length or not increasing; a row with
+`first + count > len(edges_m) − 1` or `first < 0`. Property `count`
+(`diff(offsets)`).
 
 Python, `src_python/tin_engine/dem_heights.py` (no CLI, no file I/O):
 
 ```python
-HALF: Final = 10; CHUNK: Final = 2**18
-def step_m(tolerance_m: float) -> float                # tolerance_m / HALF; ValueError unless finite and > 0
-def edges_m(tolerance_m: float) -> NDArray[float64]    # (22,): (arange(-HALF-1, HALF+1) + 0.5) * step_m
-@dataclass(frozen=True, slots=True)
-class HeightShares:
-    shares: NDArray[float32]     # (T, 23)
-    nodata: NDArray[float32]     # (T,)
-    edges_m: NDArray[float64]    # (22,), what the writers state
-    without_data: int            # rows with nodata == 1.0
+DEFAULT_CLASS_M: Final = 1.0; MAX_HALF: Final = 127; CHUNK: Final = 2**18
+def half_count(tolerance_m: float, class_m: float) -> int      # 3.1's n; ValueError unless both finite and > 0, or n > MAX_HALF
+def edges_m(half: int, class_m: float) -> NDArray[float64]     # (2·half + 2,): (arange(-half - 1, half + 1) + 0.5) * class_m
 def height_shares(windows: SourceWindows, vertices: NDArray[float64], triangles: NDArray[uint32],
-                  *, tolerance_m: float, mesh_crs: str | None, threads: int,
-                  chunk: int = CHUNK) -> HeightShares
+                  *, tolerance_m: float, class_m: float, mesh_crs: str | None, threads: int,
+                  chunk: int = CHUNK) -> tuple[HeightTable, int]  # the table and its triangles without data
 ```
 
 `mesh_crs` None: the mesh is in `windows.meta`'s CRS, no reprojection;
@@ -385,8 +441,18 @@ otherwise the vertices are reprojected from it. Per chunk of `chunk`
 triangles: the pixels under its corners (floor of the least to ceil of the
 greatest, clipped to the raster; a window past a `HeldWindows` part is its
 `ValueError`, a defect), `windows.window(...)`, the corners shifted to it,
-row areas for it. `row_areas`'s body moves to a helper over (top edge,
-dx, dy, rows, CRS) that it and `dem_heights` call.
+row areas for it; chunk tables are joined by shifting each chunk's offsets.
+`row_areas`'s body moves to a helper over (top edge, dx, dy, rows, CRS)
+that it and `dem_heights` call.
+
+`sources.py`: `Source` gains `vertical_accuracy_m: PositiveFloat | None`
+("one standard deviation of the height error the distributor states, in
+metres"), refused unless `values == "heights"`, as `position_error_m` is
+for non-features. `data/sources.toml`: `anadem-v1` 6.79, `glo30` 2.43,
+each with its quotation (section 1). `cli.py` takes w from the entry
+`_dem_sources` returns, else `DEFAULT_CLASS_M`. The main session adds
+`vertical_accuracy_m = 1.0` to Ola's local `dtm10-norway` entry (outside
+the repository; equal to the default).
 
 ### 3.5 Where it runs
 
@@ -399,150 +465,168 @@ On the mesh as written, after the trim, against:
   the **source's** windows, never the resampled grid (section 2). `DemInput`
   and `PieceDem` gain `source: SourceWindows | None`, the `TileWindows` or
   `HeldWindows` they already build for the check points, set only when the
-  option is on; `_refined` takes it, `mesh_crs` the
-  target CRS. Today that source tile is freed once the check-point store is
-  built (as the code reads: the exhausted block generator held its last
-  reference); with the option it is held through the final check.
+  option is on; `_refined` takes it, `mesh_crs` the target CRS. With the
+  option the source tile is held through the final check.
 - `--triangles`: trials run with `dem_heights=False`; the kept mesh is
-  measured once, as its error summary is, with τ the chosen tolerance.
+  measured once, with τ the chosen tolerance.
 - The no-refinement path (`--stride` alone) never runs it: refused (3.1).
 - Cut runs: each piece through `_refined`; `Piece` gains `heights`, and
   `_write_piece` writes them. A piece's tile, or its `HeldWindows` part
   snapped outward to source nodes, holds every pixel its triangles touch.
 
-`How` gains `dem_heights: bool = False`; τ is `how.tolerance`, or the
-chosen tolerance under `--triangles`. With the option off nothing is held
-and nothing moves.
+`How` gains `dem_heights: bool = False` and `dem_class_m: float = 1.0`;
+τ is `how.tolerance`, or the chosen tolerance under `--triangles`. With
+the option off nothing is held and nothing moves.
 
 ### 3.6 The files (stable names)
 
 | name | `.vtk` | `.ply` | `.gpkg` |
 |---|---|---|---|
-| `dem_height_shares` | cell array, 23 components, `float` | face `list uchar float`, always 23 | table `dem_height_shares` (`triangle`, `class`, `share`), non-zero rows only |
-| `dem_nodata_share` | cell array, `float` | face `float` | `triangles` column `REAL` |
-| `dem_height_edges_m` | `FieldData` array, 22 `double` | comment `dem_height_edges_m` and the 22 edges, `repr` | table `dem_height_classes` (`class`, `lower_m`, `upper_m`, NULL at the open ends) |
+| `dem_height_shares` | dataset array, S `float` | face `list uchar float` (its length is the count) | table `dem_height_shares` (`triangle`, `class`, `share`), every class of every span, zeros inside a span kept |
+| `dem_height_offsets` | dataset array, T + 1 `unsigned_int` | (the list lengths) | (the rows) |
+| `dem_height_first` | dataset array, T `int` | face `int` | (the `class` column) |
+| `dem_nodata_share` | cell array, `float`, 0 on lines | face `float` | `triangles` column `REAL` |
+| `dem_height_edges_m` | dataset array, 2n + 2 `double` | comment `dem_height_edges_m` and the edges, `repr` | table `dem_height_classes` (`class`, `lower_m`, `upper_m`) |
 
-The edges are the run's: e(−11) … e(10) of 3.1 for its τ, the same in
-every piece file of a cut run. `.vtk`: every cell array covers every cell; lines get zeros. Placed after
-the existing cell arrays. `.ply`: after the existing face properties, binary
-and ASCII. Record entry (so in the file's dataset strings and `--stats`):
-`dem_height_triangles_without_data`. No NaN is written, so ASCII readers
-need no special value. The names are the contract: renamed only with a
-deprecation by a later increment.
+**How a reader finds a triangle's classes:** triangle t (the t-th
+triangle, lines not counted, as `land_cover_offsets` counts them) has
+count = offsets[t + 1] − offsets[t]; its i-th share is
+shares[offsets[t] + i], the share of class index first[t] + i, between
+edges[first[t] + i] and edges[first[t] + i + 1]. In `.ply` the face's list
+is its shares and `dem_height_first` its first class; in `.gpkg` the rows
+of `dem_height_shares` for the triangle, `class` being the class index.
 
-**Reader.** `MeshArrays` gains `dem_height_shares` `(T, 23)` float32,
-`dem_height_edges_m` `(22,)` float64 and `dem_nodata_share` `(T,)` float32,
-each the triangle entries only, or None. A wrong type, entry count, or
-component count other than edges + 1, or edges not strictly increasing,
-is a `ValueError` naming the array. The reader returns the file's edges; it
-checks no value against a constant.
+Why this layout: the count varies by triangle, from 1 to 2n + 1, and the
+mean is far below the bound (3.79 against 21 at τ = 10 on the fixture), so
+a padded (T, 2n + 1) array would hold mostly zeros and its width would
+still change from run to run. The sparse table costs 4 bytes per share and
+12 per triangle, and is the layout `land_cover_offsets`/`_classes`/
+`_fractions` already put in all three formats, so every writer and reader
+extends a pattern it has. Contiguous spans store one first class instead
+of a class per share. Record entries (so in the file's dataset strings and
+`--stats`): `dem_height_triangles_without_data`, `dem_height_class_m`, and
+`dem_height_class_from` (`vertical_accuracy_m of source <key>`, or
+`default: the DEM states no vertical accuracy`). No NaN is written. The
+names are the contract: renamed only with a deprecation by a later
+increment.
+
+**Reader.** `MeshArrays` gains `dem_heights: HeightTable | None`, from the
+arrays above; a wrong type or length is the model's `ValueError`, naming
+the array. The reader checks no value against a constant.
 
 ### 3.7 The option, refusals and exclusions
 
 `--dem-heights`, a flag, off by default. Help: "Write, per triangle, the
-share of its area at each height about its own plane, in 23 classes a
-tenth of the tolerance wide, centred on 0, with open ends past 1.05 times
-the tolerance (dem_height_shares; the edges in dem_height_edges_m), and the
-share over NoData (dem_nodata_share), from the DEM's own pixels. Needs
---tolerance or --triangles." Works with `--tolerance` (and `--stride` as
-its start grid), `--triangles`, `--domain`, `--out-crs` and cut runs, in
-`.vtk`, `.ply` and `.gpkg`; mirrored in the MCP tool's arguments.
+share of its area at each height about its own plane, in classes as wide
+as the DEM's published vertical accuracy (1 m when its source states
+none), centred on 0; each triangle carries the classes its own DEM nodes
+reach (dem_height_shares, dem_height_offsets, dem_height_first; the edges
+in dem_height_edges_m), and the share over NoData (dem_nodata_share),
+from the DEM's own pixels. Needs --tolerance or --triangles." Works with
+`--tolerance` (and `--stride` as its start grid), `--triangles`,
+`--domain`, `--out-crs` and cut runs, in `.vtk`, `.ply` and `.gpkg`;
+mirrored in the MCP tool's arguments.
 
-Not built: slope and aspect distributions, hollow and knoll shares (they
-need a window past the triangle), moments, fixed classes in metres,
-plan area (three vertices away), a histogram of the resampled grid.
+Not built: a class-width option, slope and aspect distributions, hollow
+and knoll shares, moments, plan area, a histogram of the resampled grid.
 
 ## 4. Invariants
 
 1. **Off is today:** without `--dem-heights`, `.vtk`, `.ply` and `.gpkg`
    bytes equal master `98fe80c3`'s for the same command.
-2. **Every row sums to 1:** Σ shares + nodata = 1 within 1e-5 (the bound
-   of 3.3 is 1.4e-6), for every triangle.
+2. **Every row sums to 1:** Σ shares + nodata = 1 within 1e-5 for every
+   triangle (the bound of 3.3 is 2.5e-6 at 41 classes).
 3. **Each pixel's area once:** over all triangles of a run (all pieces of a
    cut run), the weights a pixel gives sum to its area inside the written
-   mesh, to rounding (1e-9 relative in double; 1e-6 through the float32 shares).
+   mesh, to rounding (1e-9 relative in double; 1e-6 through float32).
 4. **Source, not resample:** on the reprojected path no share depends on
    the resampled grid's values.
 5. **Thread count changes nothing:** the arrays are byte-identical for any
    `--threads`.
 6. **Land cover unchanged:** `class_areas` returns today's bytes after the
    refactor; the land-cover suite passes untouched.
-7. **The classes follow the tolerance:** every file states the edges
-   (j + ½) · τ / 10, j = −11 … 10, of its run's τ (3.1), the same in every
-   piece of a cut run.
-8. **Inside the tolerance, inside the range:** a piece whose pixel centre
-   lies inside its triangle is in an inner class; only pieces of pixels
-   centred outside the triangle reach the open classes. Exact in the DEM's
-   own CRS; on the reprojected path a centre within departure (c)'s error of
-   an edge may fall either way.
+7. **The classes are the DEM's and the tolerance's:** every file states the
+   edges (j + ½) · w, j = −n − 1 … n, w its source's width and n 3.1's for
+   its τ, the same in every piece of a cut run.
+8. **The span is the held nodes':** each triangle's classes run from the
+   lowest to the highest class of the non-NoData nodes it holds (one class,
+   the mean residual's, when it holds none; none when it has no data), so
+   count ≤ 2n + 1.
+9. **Convergence:** at τ < w/2 every triangle with data has exactly one
+   class; on a refined sequence of meshes of one DEM the mean count falls
+   toward 1 (measured, section 2).
 
 ## 5. Tests (`@tester`)
 
 Figures are from the exact `Fraction` oracle (clip, area and class in
-exact arithmetic, the residual at the pixel centre) unless said. Shares
-are {class centre in metres: share}; unlisted classes and nodata are 0.
-Binding-level tests pass `step_m=1.0` (τ = 10) unless said, so their
-classes are 1 m. Second revision: tests 1, 2 and 14 gain `--tolerance 10`
-(measured: still 2 triangles, the same two as `--stride 10` alone, largest
-difference 2 m, with and without test 2's NoData node), so their figures
-stand; tests 5, 8, 10, 11 and 12 are recomputed; 17 and 18 are new.
+exact arithmetic, the residual at the pixel centre, the span rule) and
+were reproduced by the probe `span2.cpp` unless said. A triangle's shares
+are written {class k in metres / w: share} with its first class index and
+count; classes inside the span not listed hold 0, and nodata is 0 unless
+listed. Binding-level tests pass `class_m=1.0, half=10` unless said. The
+CLI fixtures are paths, so w = 1 m. Third revision: tests 1, 2, 4-9, 10,
+11, 14, 15, 17, 18 change; 19-22 are new.
 
 1. **11 × 11 nodes, 10 m, CLI.** `micro_tiff`, z = 2 m on columns 1 and 2
-   (x 10 and 20 m), 0 elsewhere, `--stride 10 --tolerance 10 --dem-heights`,
-   `.vtk` and `.ply`: 2 triangles, plane 0, τ = 10, s = 1 m. Whichever diagonal the mesh takes, the
-   triangle holding both west corners has {0: 33/50, 2: 17/50} and the other
-   {0: 47/50, 2: 3/50}. The test reads the diagonal from the file. (Cut
-   pixels on every side: the half columns at x = 0 and the diagonal.)
+   (x 10 and 20 m), 0 elsewhere, `--stride 10 --tolerance 10
+   --dem-heights`, `.vtk` and `.ply`: 2 triangles, plane 0, n = 10.
+   Whichever diagonal the mesh takes, the triangle holding both west
+   corners has first 10, count 3, {0: 33/50, 2: 17/50}, and the other
+   first 10, count 3, {0: 47/50, 2: 3/50} (it holds the diagonal's
+   column-1 and -2 nodes). The test reads the diagonal from the file.
 2. **NoData.** Test 1 with node (row 5, col 3) NoData (world (30, 50)): the
-   triangle holding both west corners becomes {0: 16/25, 2: 17/50}, nodata 1/50; the
-   other is unchanged; `dem_height_triangles_without_data` 0.
+   triangle holding both west corners becomes {0: 16/25, 2: 17/50}, nodata
+   1/50, first 10, count 3; the other is unchanged;
+   `dem_height_triangles_without_data` 0.
 3. **All NoData, Python level** (`height_shares` with `TileWindows` over a
-   hand-built 3 × 3 tile, 10 m, centre node NoData, a hand-built mesh and
-   `tolerance_m=10`):
-   a triangle inside the centre pixel (index corners (1.1, 1.1), (1.4, 1.1),
-   (1.1, 1.4)) gets nodata 1.0, shares all 0.0, and `without_data` 1.
-4. **Class edges and open ends, binding level.** 6 × 6 pixels, row_area 1;
-   one triangle (0, 0), (6, 0), (0, 6) in index space, z 0 at its corners;
-   DEM 0 except (row, col) (0, 0) 3.0, (0, 1) 10.5, (0, 2) −10.6, (1, 0)
-   −10.5, (1, 1) −0.5, (2, 0) 0.5, and (5, 5) 7.0 outside. Area 18; shares
-   at index 0, 1, 12, 14, 22 each 1/18 (open lower, −10, +1, +3, open
-   upper), index 11 (class 0) 13/18.
-5. **Pixel centre, outside the triangle.** 3 × 3 pixels of 0; triangle
-   (1.1, 1.1), (1.4, 1.1), (1.1, 1.4) with z 0, 3, 0: the plane is 4.0 at
-   the pixel centre (1.5, 1.5), {−4: 1}. (At the piece centroid it would be
-   1.0, class −1.)
-6. **Plane as written.** Test 4 with z 1.0 at all corners: index 10
-   (class −1) 13/18, index 0 2/18, index 11, 13, 21 each 1/18.
+   hand-built 3 × 3 tile, 10 m, centre node NoData, `tolerance_m=10,
+   class_m=1`): a triangle inside the centre pixel (index corners (1.1,
+   1.1), (1.4, 1.1), (1.1, 1.4)) gets count 0, first 0, nodata 1.0, and
+   1 triangle without data.
+4. **Class edges and clamp, binding level.** 6 × 6 pixels, row_area 1;
+   one triangle (0, 0), (6, 0), (0, 6) in index space, z 0 at its corners
+   (it holds the 21 nodes with r + c ≤ 5); DEM 0 except (row, col) (0, 0)
+   3.0, (0, 1) 10.5, (0, 2) −10.6, (1, 0) −10.5, (1, 1) −0.5, (2, 0) 0.5,
+   and (5, 5) 7.0 outside. Area 18: first 0, count 21, {−10: 2/18 (−10.6
+   clamped, −10.5 on its lower edge), 0: 13/18 (−0.5 on its lower edge),
+   +1: 1/18 (0.5 on its lower edge), +3: 1/18, +10: 1/18 (10.5 clamped)}.
+5. **No held node.** 3 × 3 pixels of 0; triangle (1.1, 1.1), (1.4, 1.1),
+   (1.1, 1.4) with z 0, 3, 0: it holds no node; the plane is 4.0 at the
+   pixel centre (1.5, 1.5): first 6, count 1, {−4: 1}. (At the piece
+   centroid it would be 1.0, class −1.)
+6. **Plane as written.** Test 4 with z 1.0 at all corners: first 0, count
+   21, {−10: 2/18, −1: 13/18, 0: 1/18, +2: 1/18, +10: 1/18}.
 7. **Row areas.** 2 × 2 pixels, row 0 at 0 m, row 1 at 2 m, row_area
-   (1, 3); triangles (0, 0), (2, 0), (0, 2) and (2, 0), (2, 2), (0, 2):
-   {0: 1/2, 2: 1/2} and {0: 1/10, 2: 9/10}.
+   (1, 3); triangles (0, 0), (2, 0), (0, 2) and (2, 0), (2, 2), (0, 2),
+   z 0: each first 10, count 3, {0: 1/2, 2: 1/2} and {0: 1/10, 2: 9/10}.
 8. **Resolution, binding level.** z = 3 sin(2πx/400) cos(2πy/300) m on
    [0, 1000]² m, 10 m (101²) and 5 m (201²) nodes, the 32 triangles of a
-   250 m grid split nw-se, corners at z(x, y): classes −5 … +5 occur; the
-   distance between the two histograms, measured median 0.012, largest
-   0.018 (probe, double, pixel centre); the test asserts at most 0.03.
+   250 m grid split nw-se, corners at z(x, y): classes −5 … +5 occur; each
+   triangle's count is the same from both DEMs; the distance between the
+   two histograms on the shared classes, measured median 0.012, largest
+   0.018 (probe); the test asserts at most 0.03.
 9. **Each pixel's area once, property.** C++ (`tests/cpp/property`): 300
    random triangulations of a rectangle in index space with off-node fans;
-   for 20 random pixels each, the pixel set to 100 m and the rest 0 with
-   corner z 0: Σ over triangles of (plan area × share of class +11) equals
-   the pixel's area inside the rectangle within 1e-6 relative (float32 shares).
+   for 20 random pixels each, the pixel NoData and the rest 0 with corner
+   z 0: Σ over triangles of (plan area × nodata share) equals the pixel's
+   area inside the rectangle within 1e-6 relative. (NoData, not a high
+   pixel: departure c folds a high pixel's outside pieces into class 0.)
 10. **Cut run.** `pieces_fixtures` `hills()`, `SQUARE`, tolerance 1,
-    `--pieces 4 --dem-heights`: 4 piece files, 1,163 triangles (the mesh
-    is the first revision's), τ = 1, s = 0.1 m; every piece file states the
-    edges (j + ½) · 0.1; a Python oracle (shapely clip in index space,
-    residual at the pixel centre, classes of 3.1 at s = 0.1) over every
-    triangle of every piece: shares and nodata within 1e-5; and invariant
-    8: each triangle's open-class share is at most the oracle's share of
-    its pieces whose pixel centre lies outside it.
+    `--pieces 4 --dem-heights`: 4 piece files, 1,163 triangles, n = 1;
+    every piece file states the edges −1.5, −0.5, 0.5, 1.5; a Python
+    oracle (shapely clip in index space, residual at the pixel centre,
+    held nodes by 3.2's test, the span rule) over every triangle of every
+    piece: the same first and count, shares and nodata within 1e-5.
 11. **Reprojected path, CLI.** `tests/fixtures/velhas`, `--out-crs
-    EPSG:31983 --tolerance 5 --dem-heights`: 969 triangles, s = 0.5 m; the
-    same oracle in the source's index space (corners reprojected to
-    EPSG:4674, `row_areas` per row): shares within 1e-4. Spread is each
-    triangle's own (the standard deviation of its class centres k · s, the
-    open classes at ±11 s), weighted by its plan area in EPSG:31983; with
-    the class-0 share weighted the same way: 1.212 m and 0.118 (probe,
-    section 2), asserted within 0.01 and 0.005; the resampled grid gives
-    1.141 m and 0.148, outside both.
+    EPSG:31983 --tolerance 5 --dem-heights`: 969 triangles, w = 1 m,
+    n = 5; the same oracle in the source's index space (corners reprojected
+    to EPSG:4674, `row_areas` per row): shares within 1e-4 where first and
+    count agree, and they agree for at least 99 % of triangles (a node
+    within departure d's error of an edge may be held either way). Spread
+    (each triangle's standard deviation of its class centres k · w) and
+    class-0 share, weighted by plan area in EPSG:31983: 1.164 m and 0.228
+    (probe), asserted within 0.01 and 0.005; the resampled grid gives
+    1.121 m and 0.262, outside both.
 12. **Off is byte-identical.** Tests 1 (with its `--tolerance 10`), 10 and
     11, a `.gpkg` of test 1 without the flag, and `class_areas`'s three
     arrays on `TestThreads`' input in
@@ -557,79 +641,115 @@ stand; tests 5, 8, 10, 11 and 12 are recomputed; 17 and 18 are new.
 13. **Threads.** Test 8's 5 m case through the binding, and test 10's run,
     at threads 1, 2 and 7: equal bytes.
 14. **Formats agree.** Test 1 as `.vtk`, `.ply` and `.gpkg`: the same
-    shares and nodata shares; the edges array, comment and table give the
-    same 22 edges, −10.5 … +10.5 (τ = 10; the run's largest difference is
-    2 m, so edges from it would be ±2.1); `.vtk` lines get zeros;
-    `read_mesh` returns the triangle part.
+    offsets, first classes, shares and nodata shares; the edges array,
+    comment and table give the same 22 edges, −10.5 … +10.5; `.vtk` lines
+    get nodata 0 and no rows; `read_mesh` returns the `HeightTable`;
+    `dem_height_class_m` 1.0 and `dem_height_class_from` the default's
+    words in the record.
 15. **Reader refusals.** A hand-made `.vtk` with `dem_height_shares` of
-    type `double`, 22 components, or one cell short, `dem_nodata_share` of
-    type `double`, an edges array of 21, and edges not increasing:
-    `ValueError` naming the array; a file without them gives None.
+    type `double`, offsets ending one short of the shares, offsets
+    decreasing, `dem_height_first` one short, a row whose first + count
+    passes the classes, `dem_nodata_share` of type `double`, edges of odd
+    length, and edges not increasing: `ValueError` naming the array; a
+    file without them gives None.
 16. **CLI.** `--dem-heights` in `rasputin mesh --help` and the MCP tool's
     arguments.
 17. **Refusals.** Test 1's DEM with `--stride 10 --dem-heights` (no
-    `--tolerance`) and with `--tolerance 0 --dem-heights`: non-zero exit
-    before any file, the message naming `--tolerance`; the binding with
-    `step_m` 0, −1 and NaN: `ValueError`.
-18. **The range follows the tolerance, CLI.** Test 1 with `--tolerance 2`
-    instead (measured: still 2 triangles, largest difference 2 m): s =
-    0.2 m, edges (j + ½) · 0.2; the triangle holding both west corners
-    {0: 33/50, 2.0: 17/50} at index 21 (class +10, the outermost inner
-    class: the 2 m nodes at exactly τ lie mid-class, not open), the other
-    {0: 47/50, 2.0: 3/50}.
+    `--tolerance`), with `--tolerance 0 --dem-heights`, and with
+    `--tolerance 200 --dem-heights` (401 classes): non-zero exit before
+    any file, the message naming `--tolerance`; the binding with
+    `class_m` 0, −1 and NaN and with `half` −1 and 128: `ValueError`;
+    `vertical_accuracy_m` on a features source and on a class source:
+    the source file's `ValueError`.
+18. **The count follows the tolerance, CLI.** Test 1 with `--tolerance 2`
+    (measured: still 2 triangles, largest difference 2 m): n = 2, edges
+    −2.5 … 2.5 (6); the triangle holding both west corners first 2, count
+    3, {0: 33/50, 2: 17/50}, class +2 the outermost (the 2 m nodes at
+    exactly τ inside), the other first 2, count 3, {0: 47/50, 2: 3/50}.
+19. **Pieces centred outside fold, binding level.** 5 × 5 pixels of 0
+    but (0, 0) 2.0 and (1, 3) 5.0; triangle (0.2, 0.2), (4.0, 0.2),
+    (0.2, 4.0), z 0, area 7.22: it holds node (0, 0) (class 2) and nodes
+    of class 0; pixel (1, 3)'s piece of area 0.02 is centred outside
+    (3.5, 1.5) and folds into class 2: first 10, count 3, {0: 328/361,
+    2: 33/361}. Without departure c: count 6, a share 1/361 at +5.
+20. **The width is the source's, CLI.** Test 1's DEM registered as a local
+    source with `vertical_accuracy_m = 2.5` (a sources file under
+    `RASPUTIN_DATA` in `tmp_path`), `--dem <key> --stride 10 --tolerance
+    10 --dem-heights`: n = 4, edges (j + ½) · 2.5, j = −5 … 4 (10, ±11.25);
+    the 2 m nodes are class +1: the west triangle first 4, count 2,
+    {0: 33/50, +1: 17/50}, the other first 4, count 2, {0: 47/50, +1:
+    3/50}; record `dem_height_class_m` 2.5 and `dem_height_class_from`
+    naming the key.
+21. **Convergence, CLI.** `write_dem(hills(n=201))`, `--stride 200
+    --dem-heights` at `--tolerance` 4, 2, 1 and 0.4 (`.vtk`): 1,546,
+    11,279, 42,457, 65,379 triangles; one-class share 0.6, 20.6, 73.1,
+    100.0 % and mean count 4.875, 2.492, 1.283, 1.000 (probe); asserted:
+    the mean count strictly falls, the one-class share never falls, every
+    count is at most 2n + 1 (9, 5, 3, 1), and at 0.4 every count is 1.
+22. **`half_count` and `edges_m`.** (τ, w) → n: (1, 1) 1, (0.4, 1) 0,
+    (0.5, 1) 1, (2.5, 1) 3, (10, 1) 10, (10, 2.5) 4, (5, 6.79) 1,
+    (127.4, 1) 127; (127.5, 1), (1, 0), (0, 1), (NaN, 1): `ValueError`.
+    `edges_m(1, 1.0)` is (−1.5, −0.5, 0.5, 1.5) exactly.
 
-**Invariant-critical:** the overlap weights and the residual. Mutation
-targets: in `height_shares.hpp` the two class-edge comparisons, the
-division by s, the open-end clamp, the pixel-centre evaluation, the NoData
-branch and the denominator; in `dem_heights.py` `step_m` and `edges_m`; in
-`overlap.hpp` the whole-pixel test (`full_begin`, `full_end`) and the piece
-area.
+**Invariant-critical:** the overlap weights, the residual and the span.
+Mutation targets: in `height_shares.hpp` the two class-edge comparisons,
+the division by w, the clamp to ±half, the pixel-centre evaluation, the
+held-node test, the fold to the span's ends, the no-node class, the NoData
+branch and the denominator; in `dem_heights.py` `half_count` and
+`edges_m`; in `overlap.hpp` the whole-pixel test (`full_begin`,
+`full_end`) and the piece area.
 
 **Mutants** the suite must kill: `<=` for `<` at a class edge (4); classes
-not centred, `floor(r)` (4); open ends not clamped (4); residual at the
-piece centroid (5, 10); s fixed at 1 m (10, 11, 18); no half-class margin,
-the inner range ±τ (18: the 2 m nodes go open); the range from the largest
-difference, not τ (14); edges not stated per run (10, 18); a cut pixel counted whole, or a whole pixel clipped
-wrongly (1, 9); the plane from the DEM, not the written z (6); row_area
-ignored (7); NoData counted in class 0 (2, 3); the denominator without
-NoData (2: 32/49 for 16/25); the resampled grid on the reprojected path
-(11); a shared accumulator across threads (13); the flag ignored in
-`_write_piece` (10); anything written when off (12); lines not
-zero-padded (14); `class_areas`'s visitor reordered (12).
+not centred, `floor(r)` (4); no clamp to ±half (4); residual at the piece
+centroid (5, 10); the span over all pieces (19, 21); folding to the wrong
+end (19); the no-node triangle given class 0, or its pieces' spread (5);
+held-node test strict, no margin (1: the corner and diagonal nodes); the
+width from the tolerance, τ / 10 (1, 18, 20); the source's width ignored
+(20); n by a non-strict margin (22, (2.5, 1)); edges not stated per run
+(10, 18, 20); offsets or first off by one (14, 15); a cut pixel counted
+whole, or a whole pixel clipped wrongly (1, 9); the plane from the DEM,
+not the written z (6); row_area ignored (7); NoData counted in class 0
+(2, 3, 9); the denominator without NoData (2: 32/49 for 16/25); the
+resampled grid on the reprojected path (11); a shared accumulator across
+threads (13); the flag ignored in `_write_piece` (10); anything written
+when off (12); `class_areas`'s visitor reordered (12).
 
 ## 6. Degeneracies
 
-A triangle smaller than a pixel: one or a few pieces, a histogram as any
-other; its pixel centres usually lie outside it, so its residuals are the
-plane extrapolated (departure b) and may fall in the open classes. A
-tolerance of 0 has classes of no width: `--dem-heights` refuses it (3.1); without the flag it runs as today. All its pixels NoData: nodata 1.0, shares 0.0, counted (3.3). A
-zero-area triangle never reaches the file (the engine writes none) and is
-refused by the binding. A corner past the DEM window: `OutsideWindow`, a
-defect upstream, never a user's input. A reprojected vertex with no image
-(`inf`): the chunk window's `ValueError` (the mesh reaches outside the DEM),
-before the binding, which would refuse it as not finite.
+A triangle smaller than a pixel: one or a few pieces; it usually holds no
+node, so it has one class (3.1). A tolerance below w/2: n = 0, one class
+everywhere, written as at any tolerance (3.1). A tolerance of 0: refused
+with `--dem-heights` (3.1); without the flag it runs as today. All its
+pixels NoData: count 0, nodata 1.0, counted (3.3). A held node on NoData
+joins no span; a triangle whose held nodes are all NoData but which has
+valid pieces gets the no-node class. A zero-area triangle never reaches the
+file and is refused by the binding. A corner past the DEM window:
+`OutsideWindow`, a defect upstream. A reprojected vertex with no image
+(`inf`): the chunk window's `ValueError`, before the binding.
 
 ## 7. Cost and memory at 637,000 km², 30 m
 
 7.1e8 DEM nodes, 23 times the São Francisco piece of section 2.
 
-- **Time (estimate):** the walk scales with pixels and cut pixels; 0.35-0.46
-  s on the piece at 10 threads gives about 10 s for the basin, plus 1.2 s
-  to reproject its vertices, spread over its pieces, against the
-  piece's 12 s mesh run times 23. Prediction for the fixture command at
-  `--tolerance 10`: +0.05 s for the walk (1.2 times the error summary's
-  0.037 s) and +0.03 s to encode 6.7 MB, on a 0.23 s run.
-- **Memory:** 96 bytes per triangle while held (92 of shares, 4 of nodata
-  share), about twice that while one file is encoded, plus 72 bytes per
-  triangle of a chunk (corners and z, 2^18 triangles, 19 MB) while
-  measured. On the fixture's land at `--tolerance 10` about 0.02 triangles
-  per node: 2 bytes per node against the piece budget's estimate of 37
-  (`decompose.bytes_per_node(10)`). On the reprojected path, the source
-  tile held through the final check: 4 bytes per source node (float32)
-  beside the check-point store's 16 (`check_points.hpp`, `Packed`). The
-  piece budget's estimate is not changed; `@perf` reports the peak with
+- **Time (estimate):** the walk scales with pixels and cut pixels; the
+  held-node test adds three products per cut piece and the fold 2n + 1
+  adds per triangle (63 at n = 20 against tens of pixels), so the first
+  revision's figures stand to within noise: 0.35-0.46 s on the piece at 10
+  threads, about 10 s for the basin, plus 1.2 s to reproject its vertices,
+  against the piece's 12 s mesh run times 23. Prediction for the fixture
+  command at `--tolerance 10`: +0.05 s for the walk and +0.01 s to encode
+  2 MB, on a 0.23 s run.
+- **Memory:** 12 bytes per triangle (offset, first, nodata) plus 4 per
+  share while held: 27 bytes per triangle on the fixture at τ = 10 (mean
+  3.79), at most 96 at n = 10 and 176 at n = 20; twice that while the
+  per-block buffers are joined, plus 72 bytes per triangle of a chunk
+  (corners and z, 2^18 triangles, 19 MB) while measured. On the reprojected
+  path, the source tile held through the final check: 4 bytes per source
+  node beside the check-point store's 16 (`check_points.hpp`, `Packed`).
+  The piece budget's estimate is not changed; `@perf` reports the peak with
   and without.
-- **Files:** 96 bytes per cell in binary `.vtk`, 97 in `.ply`.
+- **Files:** binary `.vtk` and `.ply`, 12 bytes per triangle plus 4 per
+  share.
 
 ## 8. Acceptance (timings reported, not gated)
 
@@ -640,18 +760,23 @@ peak resident memory each.
 
 ## 9. Size
 
-Estimated +430 counted lines (second revision: the refusals and τ's
-threading +10, the centroid and the stride path −10): `height_shares.hpp` +90, `overlap.hpp`
-refactor +15, binding and `_core.pyi` +45, `dem_heights.py` +55,
-`land_cover_fractions.py` row-area helper +8, `cli.py` +65 (flag,
-`_refined`, refusals, piece and single writes, record), `dem_input.py` +8,
-`refine_job.py` and `basin_run.py` +10, `io/vtk_legacy.py` +30, `io/ply.py`
-+25, `io/geopackage_write.py` +35, `io/vtk_read.py` +40, MCP arguments +5.
-One PR.
+Estimated +500 counted lines (third revision: the held-node test, the fold
+and the sparse join +35, `HeightTable` +30, the source field and width
+resolution +15, the record entries +5; the fixed-count arrays −15):
+`height_shares.hpp` +120, `overlap.hpp` refactor +15, binding and
+`_core.pyi` +50, `dem_heights.py` +60, `io/models.py` +30,
+`land_cover_fractions.py` row-area helper +8, `sources.py` +6, `cli.py` +70
+(flag, width, `_refined`, refusals, piece and single writes, record),
+`dem_input.py` +8, `refine_job.py` and `basin_run.py` +10,
+`io/vtk_legacy.py` +30, `io/ply.py` +25, `io/geopackage_write.py` +35,
+`io/vtk_read.py` +35, MCP arguments +5. One PR.
 
 ## 10. Questions for Ola
 
-1. Classes a tenth of the tolerance wide, 23 at every tolerance (1 m at
-   `--tolerance 10`, 0.1 m at 1), the inner ones reaching half a class past
-   the tolerance. Default: **this**; fixed 1 m classes over ±tolerance was
-   the other way, which leaves 3 classes at tolerance 1 and 41 at 20.
+1. ANADEM's class width: its own published absolute standard deviation,
+   6.79 m (against ICESat-2; at tolerance 5 three Velhas triangles in four
+   then have one class), or the relative accuracy of the Copernicus DEM it
+   is built from, about 1.2 m (< 2 m LE90; ANADEM publishes no relative
+   figure, and a triangle's residuals are differences between nearby
+   pixels, which a relative figure describes)? Default: **6.79 m**,
+   ANADEM's own published figure.
