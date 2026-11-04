@@ -105,6 +105,16 @@ class TestHalfCount:
     def test_n(self, tolerance: float, width: float, n: int) -> None:
         assert dem_heights.half_count(tolerance, width) == n
 
+    def test_a_tolerance_on_an_edge_whose_quotient_rounds_low(self) -> None:
+        """The margin is strict against the product, not the quotient: at
+        w = 1.216 the tolerance (7 + 1/2) w gives tolerance / w + 1/2 just
+        under 8, so the floor alone says 7; (7 + 1/2) w is not above the
+        tolerance, so n is 8. Kills a raise step taken while < (non-strict)."""
+        width = 1.216
+        tolerance = (7 + 0.5) * width
+        assert math.floor(tolerance / width + 0.5) == 7
+        assert dem_heights.half_count(tolerance, width) == 8
+
     @pytest.mark.parametrize(
         ("tolerance", "width"),
         [
