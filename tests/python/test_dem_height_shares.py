@@ -188,6 +188,19 @@ class TestClassEdges:
             table.row(0), [2 / 18, 0, 0, 0, 14 / 18, 1 / 18, 0, 0, 1 / 18], rtol=0, atol=SHARE
         )
 
+    def test_a_residual_past_n_plus_1_metres_stays_inside_the_classes(self) -> None:
+        """The clamp is in units of w: at w = 2.5, n = 4, residuals of +6 and
+        -6 m lie past n + 1 = 5 but inside the classes (5 <= 6 < 7.5): classes
+        +2 and -2, not the end classes. Kills a quotient taken without the
+        division by w, whose early clamp then fires at 6 > 5."""
+        dem = np.zeros((6, 6))
+        dem[0, 0], dem[0, 1] = 6.0, -6.0
+        table = shares_of([EDGE_TRIANGLE], [0, 0, 0], dem, class_m=2.5, half=4)
+        assert (table.first[0], table.count[0]) == (2, 5)
+        row = table.row(0)
+        assert_allclose(row, [1 / 18, 0, 16 / 18, 0, 1 / 18], rtol=0, atol=SHARE)
+        assert_array_equal(row[[1, 3]], 0.0)
+
     def test_a_width_of_1_216_keeps_its_own_edges(self) -> None:
         """ANADEM's and GLO-30's width, n = 4: 0.5 lies in class 0 (below
         0.608), 3.0 in class +2 (1.824 <= 3 < 3.04), 10.5 clamped to +4."""
