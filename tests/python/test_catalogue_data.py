@@ -71,6 +71,10 @@ VECTOR_FIELDS = ("layer",)
 FEATURE_FIELDS = ("fields", "position_error_m")
 #: The field the named filter added: None on every shipped entry.
 NAMED_FIELDS = ("named_by",)
+#: The field the DEM height classes added (`docs/increments/137-dem-stats.md`,
+#: 3.4): GLO-30's relative LE90 of 2 m over 1.645, for it and for ANADEM.
+ACCURACY_FIELDS = ("relative_vertical_accuracy_m",)
+RELATIVE_ACCURACY = {"glo30": 1.216, "anadem-v1": 1.216}
 USER_ID = "my-x"
 
 
@@ -162,6 +166,7 @@ class TestT1TheShippedCatalogue:
     ) -> None:
         dumped = sources.SOURCES[key].model_dump(mode="json")
         added = TILE_FIELDS + LOCAL_FIELDS + VECTOR_FIELDS + FEATURE_FIELDS + NAMED_FIELDS
+        added += ACCURACY_FIELDS
         rest = {k: v for k, v in dumped.items() if k not in added}
         assert rest == snapshot["sources"][key]
         assert dumped["path"] is None
@@ -175,6 +180,12 @@ class TestT1TheShippedCatalogue:
         for key in set(SHIPPED) - {"glo30"}:
             entry = sources.SOURCES[key]
             assert (entry.tile_name, entry.tile_spacing) == (None, None), key
+
+    def test_glo30_and_anadem_state_their_relative_accuracy(self, sources: ModuleType) -> None:
+        """137, 3.4: 1.216 m for both, every other shipped entry None."""
+        for key in SHIPPED:
+            got = sources.SOURCES[key].relative_vertical_accuracy_m
+            assert got == RELATIVE_ACCURACY.get(key), key
 
     @pytest.mark.parametrize("key", STATIONS)
     def test_each_station_list_dumps_as_on_master(
@@ -288,6 +299,14 @@ class TestT2FileRefusals:
             ),
             pytest.param(
                 PER_YEAR, (), {"z_unit": "metre"}, ("z_unit",), id="z_unit on a classes entry"
+            ),
+            pytest.param(
+                PER_YEAR, (), {"relative_vertical_accuracy_m": 1.0},
+                ("relative_vertical_accuracy_m",), id="a relative accuracy on a classes entry",
+            ),
+            pytest.param(
+                ONE_COG, (), {"relative_vertical_accuracy_m": 0.0},
+                ("relative_vertical_accuracy_m",), id="a relative accuracy of 0",
             ),
         ],
     )  # fmt: skip
