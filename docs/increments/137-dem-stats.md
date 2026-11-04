@@ -203,7 +203,7 @@ and 0.213 / 0.225 are 1 m classes at the centroid, reproduced by the same
 probe). Node-count histograms on the
 fixture, 10 m against its 20 m block mean, differed by a median of 0.04-0.09
 at 49-99 nodes and 1.5-2.0 times that with 0.5 m classes (commit
-`6f0e20df`, section 2); this is the class-width argument of 3.1.
+`6f0e20df`, section 2); the first revision's width argument; 3.1 now sets the width by the tolerance.
 
 ## 3. Design
 
@@ -258,8 +258,9 @@ piece and seam at one `--tolerance`, so every piece file states the same
 edges. Refused, before any work: `--dem-heights` without `--tolerance` or
 `--triangles` ("needs --tolerance or --triangles: the height classes are a
 tenth of the tolerance"), since a `--stride`-only mesh bounds nothing
-(195 m at `--stride 30`, section 2); and `--tolerance 0`. A `--triangles`
-run whose chosen tolerance is 0 (every node on the mesh) exits non-zero
+(195 m at `--stride 30`, section 2); and `--dem-heights` with `--tolerance 0`.
+Without the flag both run as today. A `--dem-heights` run under `--triangles`
+whose chosen tolerance is 0 (every node on the mesh) exits non-zero
 after the search, naming `--tolerance`. No run has a tolerance that varies
 upward, so none needs a second set of classes.
 
@@ -282,7 +283,7 @@ whole interior pixels without a clip, cut pixels as polygons. Each piece
 has an area a (index units) times the row's pixel area A_row (m²:
 dx · dy projected, the ellipsoidal cell area of the row for a geographic
 DEM, `land_cover_fractions.row_areas`'s rule). Its residual is
-r = z_pixel − plane(c + ½, r + ½), at the pixel centre for every piece,
+ρ = z_pixel − plane(c + ½, r + ½), at the pixel centre for every piece,
 whole or cut, with plane the affine function through the triangle's three
 corners in index space with their **written** z (so a piece's seam heights
 are the written ones). In the DEM's own CRS that is the triangle's plane;
@@ -471,7 +472,9 @@ plan area (three vertices away), a histogram of the resampled grid.
    piece of a cut run.
 8. **Inside the tolerance, inside the range:** a piece whose pixel centre
    lies inside its triangle is in an inner class; only pieces of pixels
-   centred outside the triangle reach the open classes.
+   centred outside the triangle reach the open classes. Exact in the DEM's
+   own CRS; on the reprojected path a centre within departure (c)'s error of
+   an edge may fall either way.
 
 ## 5. Tests (`@tester`)
 
@@ -599,7 +602,7 @@ zero-padded (14); `class_areas`'s visitor reordered (12).
 A triangle smaller than a pixel: one or a few pieces, a histogram as any
 other; its pixel centres usually lie outside it, so its residuals are the
 plane extrapolated (departure b) and may fall in the open classes. A
-tolerance of 0 has classes of no width: refused (3.1). All its pixels NoData: nodata 1.0, shares 0.0, counted (3.3). A
+tolerance of 0 has classes of no width: `--dem-heights` refuses it (3.1); without the flag it runs as today. All its pixels NoData: nodata 1.0, shares 0.0, counted (3.3). A
 zero-area triangle never reaches the file (the engine writes none) and is
 refused by the binding. A corner past the DEM window: `OutsideWindow`, a
 defect upstream, never a user's input. A reprojected vertex with no image
