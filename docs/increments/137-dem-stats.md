@@ -12,7 +12,7 @@ serious that on a 1m vtol mesh, you propose 23 buckets": 0.1 m classes are
 finer than the DEM's own accuracy) and ruled the count per triangle ("We
 need less statistical buckets the smaller the triangle is. So this should
 also converge"). The third, this one: classes as wide as the DEM's
-published vertical accuracy (3.1), and each triangle carries only the
+published relative vertical accuracy (3.1), and each triangle carries only the
 classes its own DEM nodes reach, so the count shrinks to one as the mesh
 refines (3.2, invariant 9). Full lane: a per-triangle number a downstream
 reader takes as input, wrong without a crash if the overlap or the plane is
@@ -31,8 +31,9 @@ reported and not gated (`perf.md` section 4, an option off by default).
 - **After**, `rasputin mesh --dem-heights` writes, for each triangle, the
   share of its area at each height above or below the triangle's own
   plane (Ola, 2026-11-04: "Cell stats: means simply histogramming"), in
-  classes of one fixed height width w: the DEM's published vertical
-  accuracy (1 m for DTM10, 6.79 m for ANADEM), else 1 m. Classes are
+  classes of one fixed height width w: the DEM's published relative
+  (point-to-point) vertical accuracy (1.216 m for ANADEM and GLO-30), else
+  1 m (DTM10's figure). Classes are
   centred on 0 (…, −w, 0, +w, …). A triangle carries only the run of
   classes from the lowest to the highest that its own DEM nodes fall in:
   one class when its ground is within ±w/2 of its plane. Finer meshes
@@ -48,7 +49,7 @@ reported and not gated (`perf.md` section 4, an option off by default).
 ```
  mesh as written (Trimmed: x, y, written z, in the mesh's CRS)
  DEM windows (SourceWindows: the tile, or the source DEM on the reprojected path)
- class width w (the DEM source's vertical_accuracy_m, else 1 m) and tolerance
+ class width w (the DEM source's relative_vertical_accuracy_m, else 1 m) and tolerance
         |
         v  [Python, dem_heights.height_shares]
  n = half_count(tolerance, w); corners -> the DEM's index space (reprojected
@@ -89,22 +90,38 @@ reuses. The sparse table per triangle is the compressed-row layout the
 land-cover fractions already use (`ClassFractions`, `io/models.py`).
 
 *The width.* A class narrower than the DEM's error resolves noise, so the
-width is the error the DEM's distributor publishes, as one standard
-deviation in metres:
+width is the **relative** (point-to-point) error the DEM's distributor
+publishes, as one standard deviation in metres (main session's ruling,
+2026-11-04): relief inside a triangle is a difference of heights, and an
+absolute figure carries systematic offsets that cancel in a difference.
+A relative LE90 is already the 90th percentile of a difference of two
+points, so its σ is LE90 / 1.645, with no √2:
 
 - **Kartverket DTM10**: "± 1 meter standardavvik i høyde i områder
   etablert i NDH" (± 1 m standard deviation in areas established in the
   national detailed height model), "± 2 til 6 meter standardavvik i høyde
   i områder som ikke er etablert i NDH ennå" (data.norge.no, *DTM 10
-  Terrengmodell UTM33 2021*, read 2026-11-04). The current DTM10 is made
-  from hoydedata.no's laser model, so **1 m**.
-- **ANADEM**: against ICESat-2, bias 1.50 m, RMSE 6.99 m, **standard
-  deviation 6.79 m** (Laipelt et al. 2024, *Remote Sens.* 16(13): 2321,
-  Table 3; read in full in `docs/research/anadem-accuracy.md`). It
-  publishes no relative (point-to-point) accuracy (section 10).
-- **Copernicus GLO-30**: absolute vertical accuracy < 4 m LE90 (Product
-  Handbook v5.0, section 2.1), so 4 / 1.645 = **2.43 m** as a standard
-  deviation for normal errors (the conversion is ours).
+  Terrengmodell UTM33 2021*, read 2026-11-04). That is an absolute height
+  figure; Kartverket publishes no relative one for DTM10 (searched
+  2026-11-04: data.norge.no, Geonorge, the FKB-Laser specifications). An
+  absolute σ bounds the relative one from above, so **1 m** (the current
+  DTM10 is made from hoydedata.no's laser model) is kept, as an upper
+  bound, and the entry says so.
+- **Copernicus GLO-30**: relative vertical accuracy "< 2 m LE90 for
+  slopes ≤ 20 %, < 4 m for slopes > 20 %", point to point within 1° × 1°
+  (Product Handbook v5.0, 29.11.2022, sections 2.1-2.2; quoted in
+  `docs/research/anadem-accuracy.md` section 2), so 2 / 1.645 =
+  **1.216 m** (the conversion is ours, for normal errors). The gentle-slope
+  figure, not the worst: one number per product, and a width set by steep
+  ground would hide real relief on the flats, which are most of the São
+  Francisco basin; on steep ground the residuals are larger anyway, so a
+  narrower class there costs a class or two, not a wrong share.
+- **ANADEM**: publishes only absolute figures (against ICESat-2: bias
+  1.50 m, RMSE 6.99 m, standard deviation 6.79 m; Laipelt et al. 2024,
+  *Remote Sens.* 16(13): 2321, Table 3), so it takes the relative figure
+  of the GLO-30 it is built from, **1.216 m**. Its 3 × 3 median filter
+  and canopy correction may change that; nobody has measured it
+  (`docs/research/anadem-accuracy.md` section 2).
 - **Anything else**: 1 m, the DTM10 figure, the finest product the
   pipeline meshes.
 
@@ -212,8 +229,9 @@ mean 7.783, 4.875, 2.492, 1.283, 1.000; largest 16, 9, 5, 3, 1 (bounds 17,
 
 Velhas (`tests/fixtures/velhas`, ANADEM, `--out-crs EPSG:31983 --tolerance
 5`, 969 triangles, source pixels): at w = 1 m, 11.7 % one class, mean 3.99,
-largest 10 (bound 11), folded 1.42 %; at w = 6.79 m (ANADEM's), n = 1,
-73.9 % one class, mean 1.26, largest 3, folded 0.23 %. 22 of its triangles
+largest 10 (bound 11), folded 1.42 %; at w = 1.216 m (ANADEM's, 3.1), n = 4,
+13.1 % one class, mean 3.47 (area-weighted 4.40), largest 8 (bound 9),
+folded 1.26 % (for comparison, at ANADEM's absolute σ 6.79 m: 73.9 %, 1.26). 22 of its triangles
 hold no source node (corners are not source nodes on this path).
 
 **Centroid or pixel centre** (second revision, fixture, classes a tenth of
@@ -255,7 +273,7 @@ revision, span rule).
 
 ### 3.1 The classes
 
-The width w (metres) is the DEM source's `vertical_accuracy_m`, else
+The width w (metres) is the DEM source's `relative_vertical_accuracy_m`, else
 `DEFAULT_CLASS_M` = 1.0. Class k holds the residual r (metres) with
 (k − ½) · w ≤ r < (k + ½) · w; each bound is one product in double. The
 run's n is the least whole number ≥ 0 with (n + ½) · w > τ (τ the
@@ -269,12 +287,12 @@ reviewed design's), n = 0 below τ = 0.5. Why:
 
 - **The width is the DEM's, not the tolerance's** (Ola's second ruling). A
   class narrower than the DEM's own error splits noise; the width is the
-  distributor's published figure (section 1). **No user override**: the
+  distributor's published relative figure (section 1). **No user override**: the
   width is a property of the DEM product, stated once where the product
   is registered, so two meshes of one DEM always share their classes and
   no run tunes it. A DEM given by path, or registered without the field,
   takes 1 m, and the run record says so; a user with a DEM of known
-  accuracy registers it with `vertical_accuracy_m` in their sources file
+  accuracy registers it with `relative_vertical_accuracy_m` in their sources file
   (`sources.py` already reads local entries). Python resolves the source
   and passes the core two numbers, `class_m` and `half`: no key, path or
   CRS crosses.
@@ -317,7 +335,7 @@ height classes; at most 255"), since a `.ply` list holds at most 255. Under
 and naming `--tolerance`. Without the flag all run as today.
 
 Constant scale: `DEFAULT_CLASS_M` is metres of height, DTM10's published
-σ, checked at τ = 1 … 20 on the 7908 fixture; `MAX_HALF` is a count (the
+absolute σ (an upper bound on its relative one), checked at τ = 1 … 20 on the 7908 fixture; `MAX_HALF` is a count (the
 `.ply` `uchar` list), reached at τ ≥ 127.5 w; the held-node margin 1e-9
 (3.2) is index units, checked at 5,051 columns.
 
@@ -445,14 +463,16 @@ row areas for it; chunk tables are joined by shifting each chunk's offsets.
 `row_areas`'s body moves to a helper over (top edge, dx, dy, rows, CRS)
 that it and `dem_heights` call.
 
-`sources.py`: `Source` gains `vertical_accuracy_m: PositiveFloat | None`
-("one standard deviation of the height error the distributor states, in
-metres"), refused unless `values == "heights"`, as `position_error_m` is
-for non-features. `data/sources.toml`: `anadem-v1` 6.79, `glo30` 2.43,
-each with its quotation (section 1). `cli.py` takes w from the entry
+`sources.py`: `Source` gains `relative_vertical_accuracy_m: PositiveFloat |
+None` ("one standard deviation of the difference of two nearby heights, as
+the distributor states it or as its LE90 / 1.645, in metres"), refused unless `values == "heights"`, as `position_error_m` is
+for non-features. `data/sources.toml`: `anadem-v1` and `glo30` 1.216,
+each with the handbook's quotation and, for ANADEM, that the figure is
+its parent's (section 1). `cli.py` takes w from the entry
 `_dem_sources` returns, else `DEFAULT_CLASS_M`. The main session adds
-`vertical_accuracy_m = 1.0` to Ola's local `dtm10-norway` entry (outside
-the repository; equal to the default).
+`relative_vertical_accuracy_m = 1.0` to Ola's local `dtm10-norway` entry
+(outside the repository; equal to the default), with a comment that it is
+Kartverket's absolute σ, kept as an upper bound.
 
 ### 3.5 Where it runs
 
@@ -505,7 +525,7 @@ still change from run to run. The sparse table costs 4 bytes per share and
 extends a pattern it has. Contiguous spans store one first class instead
 of a class per share. Record entries (so in the file's dataset strings and
 `--stats`): `dem_height_triangles_without_data`, `dem_height_class_m`, and
-`dem_height_class_from` (`vertical_accuracy_m of source <key>`, or
+`dem_height_class_from` (`relative_vertical_accuracy_m of source <key>`, or
 `default: the DEM states no vertical accuracy`). No NaN is written. The
 names are the contract: renamed only with a deprecation by a later
 increment.
@@ -518,7 +538,7 @@ the array. The reader checks no value against a constant.
 
 `--dem-heights`, a flag, off by default. Help: "Write, per triangle, the
 share of its area at each height about its own plane, in classes as wide
-as the DEM's published vertical accuracy (1 m when its source states
+as the DEM's published relative vertical accuracy (1 m when its source states
 none), centred on 0; each triangle carries the classes its own DEM nodes
 reach (dem_height_shares, dem_height_offsets, dem_height_first; the edges
 in dem_height_edges_m), and the share over NoData (dem_nodata_share),
@@ -659,7 +679,7 @@ CLI fixtures are paths, so w = 1 m. Third revision: tests 1, 2, 4-9, 10,
     `--tolerance 200 --dem-heights` (401 classes): non-zero exit before
     any file, the message naming `--tolerance`; the binding with
     `class_m` 0, −1 and NaN and with `half` −1 and 128: `ValueError`;
-    `vertical_accuracy_m` on a features source and on a class source:
+    `relative_vertical_accuracy_m` on a features source and on a class source:
     the source file's `ValueError`.
 18. **The count follows the tolerance, CLI.** Test 1 with `--tolerance 2`
     (measured: still 2 triangles, largest difference 2 m): n = 2, edges
@@ -673,7 +693,7 @@ CLI fixtures are paths, so w = 1 m. Third revision: tests 1, 2, 4-9, 10,
     (3.5, 1.5) and folds into class 2: first 10, count 3, {0: 328/361,
     2: 33/361}. Without departure c: count 6, a share 1/361 at +5.
 20. **The width is the source's, CLI.** Test 1's DEM registered as a local
-    source with `vertical_accuracy_m = 2.5` (a sources file under
+    source with `relative_vertical_accuracy_m = 2.5` (a sources file under
     `RASPUTIN_DATA` in `tmp_path`), `--dem <key> --stride 10 --tolerance
     10 --dem-heights`: n = 4, edges (j + ½) · 2.5, j = −5 … 4 (10, ±11.25);
     the 2 m nodes are class +1: the west triangle first 4, count 2,
@@ -687,7 +707,7 @@ CLI fixtures are paths, so w = 1 m. Third revision: tests 1, 2, 4-9, 10,
     the mean count strictly falls, the one-class share never falls, every
     count is at most 2n + 1 (9, 5, 3, 1), and at 0.4 every count is 1.
 22. **`half_count` and `edges_m`.** (τ, w) → n: (1, 1) 1, (0.4, 1) 0,
-    (0.5, 1) 1, (2.5, 1) 3, (10, 1) 10, (10, 2.5) 4, (5, 6.79) 1,
+    (0.5, 1) 1, (2.5, 1) 3, (10, 1) 10, (10, 2.5) 4, (5, 1.216) 4,
     (127.4, 1) 127; (127.5, 1), (1, 0), (0, 1), (NaN, 1): `ValueError`.
     `edges_m(1, 1.0)` is (−1.5, −0.5, 0.5, 1.5) exactly.
 
@@ -773,10 +793,5 @@ resolution +15, the record entries +5; the fixed-count arrays −15):
 
 ## 10. Questions for Ola
 
-1. ANADEM's class width: its own published absolute standard deviation,
-   6.79 m (against ICESat-2; at tolerance 5 three Velhas triangles in four
-   then have one class), or the relative accuracy of the Copernicus DEM it
-   is built from, about 1.2 m (< 2 m LE90; ANADEM publishes no relative
-   figure, and a triangle's residuals are differences between nearby
-   pixels, which a relative figure describes)? Default: **6.79 m**,
-   ANADEM's own published figure.
+None. The width's kind (relative, not absolute) was the main session's
+ruling, 2026-11-04.
