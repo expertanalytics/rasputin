@@ -9,12 +9,20 @@ reprojected DEM's own pixels. The second tied the classes to the tolerance
 (Ola, 2026-11-04: "The range must depend on the DEM vtol") by a fixed count
 of 23, a tenth of the tolerance wide. Ola rejected that ("You can't be
 serious that on a 1m vtol mesh, you propose 23 buckets": 0.1 m classes are
-finer than the DEM's own accuracy) and ruled the count per triangle ("We
-need less statistical buckets the smaller the triangle is. So this should
-also converge"). The third, this one: classes as wide as the DEM's
-published relative vertical accuracy (3.1), and each triangle carries only the
-classes its own DEM nodes reach, so the count shrinks to one as the mesh
-refines (3.2, invariant 9). Full lane: a per-triangle number a downstream
+finer than the DEM's own accuracy). The third, this one, rests on four
+choices, each with its owner:
+
+- **Ola:** the range follows the tolerance, the count shrinks with the
+  triangle, and it converges ("We need less statistical buckets the smaller
+  the triangle is. So this should also converge").
+- **Main session:** a width equal to the DEM's published vertical accuracy,
+  the count following from the tolerance; Ola replied "Exactly." to it.
+- **Main session:** relative, not absolute, accuracy (a height difference
+  cancels systematic offsets).
+- **This design:** GLO-30's gentle-slope figure and the 1 m default (3.1).
+
+Each triangle carries only the classes its own DEM nodes reach, so the
+count shrinks to one as the mesh refines (3.2, invariant 9). Full lane: a per-triangle number a downstream
 reader takes as input, wrong without a crash if the overlap or the plane is
 wrong. New C++ lives in `include/terrain/statistics/`;
 `include/terrain/land_cover/overlap.hpp` is refactored so both uses share
@@ -114,8 +122,9 @@ points, so its σ is LE90 / 1.645, with no √2:
   **1.216 m** (the conversion is ours, for normal errors). The gentle-slope
   figure, not the worst: one number per product, and a width set by steep
   ground would hide real relief on the flats, which are most of the São
-  Francisco basin; on steep ground the residuals are larger anyway, so a
-  narrower class there costs a class or two, not a wrong share.
+  Francisco basin. On ground steeper than 20 % GLO-30's relative σ is
+  about 2.4 m (4 / 1.645), twice the class width, so there a triangle's
+  outer classes partly resolve noise.
 - **ANADEM**: publishes only absolute figures (against ICESat-2: bias
   1.50 m, RMSE 6.99 m, standard deviation 6.79 m; Laipelt et al. 2024,
   *Remote Sens.* 16(13): 2321, Table 3), so it takes the relative figure
@@ -285,7 +294,8 @@ of r is exact against the edges the file states. At w = 1 m: n = 1 at
 τ = 1 (edges ±0.5, ±1.5), n = 10 at τ = 10 (edges −10.5 … +10.5, the
 reviewed design's), n = 0 below τ = 0.5. Why:
 
-- **The width is the DEM's, not the tolerance's** (Ola's second ruling). A
+- **The width is the DEM's, not the tolerance's** (the main session's
+  proposal, to which Ola replied "Exactly."; owners in the status). A
   class narrower than the DEM's own error splits noise; the width is the
   distributor's published relative figure (section 1). **No user override**: the
   width is a property of the DEM product, stated once where the product
@@ -554,8 +564,9 @@ and knoll shares, moments, plan area, a histogram of the resampled grid.
 
 1. **Off is today:** without `--dem-heights`, `.vtk`, `.ply` and `.gpkg`
    bytes equal master `98fe80c3`'s for the same command.
-2. **Every row sums to 1:** Σ shares + nodata = 1 within 1e-5 for every
-   triangle (the bound of 3.3 is 2.5e-6 at 41 classes).
+2. **Every row sums to 1:** Σ shares + nodata = 1 within (count + 1) · 2⁻²⁴
+   for every triangle, the bound of 3.3 (2.5e-6 at 41 classes, 2⁻¹⁶ ≈
+   1.53e-5 at 255).
 3. **Each pixel's area once:** over all triangles of a run (all pieces of a
    cut run), the weights a pixel gives sum to its area inside the written
    mesh, to rounding (1e-9 relative in double; 1e-6 through float32).
@@ -640,9 +651,8 @@ CLI fixtures are paths, so w = 1 m. Third revision: tests 1, 2, 4-9, 10,
 11. **Reprojected path, CLI.** `tests/fixtures/velhas`, `--out-crs
     EPSG:31983 --tolerance 5 --dem-heights`: 969 triangles, w = 1 m,
     n = 5; the same oracle in the source's index space (corners reprojected
-    to EPSG:4674, `row_areas` per row): shares within 1e-4 where first and
-    count agree, and they agree for at least 99 % of triangles (a node
-    within departure d's error of an edge may be held either way). Spread
+    to EPSG:4674, `row_areas` per row): shares within 1e-4, and first and
+    count agree for every triangle (both map the corners the same way). Spread
     (each triangle's standard deviation of its class centres k · w) and
     class-0 share, weighted by plan area in EPSG:31983: 1.164 m and 0.228
     (probe), asserted within 0.01 and 0.005; the resampled grid gives
@@ -706,6 +716,9 @@ CLI fixtures are paths, so w = 1 m. Third revision: tests 1, 2, 4-9, 10,
     100.0 % and mean count 4.875, 2.492, 1.283, 1.000 (probe); asserted:
     the mean count strictly falls, the one-class share never falls, every
     count is at most 2n + 1 (9, 5, 3, 1), and at 0.4 every count is 1.
+    The one-class share is monotone only from tolerance 4 down: at 8 and
+    4 it counts 4 and 9 triangles of 50-350 m² (1-4 pixels; probe), so it
+    moves by whole slivers (0.7 → 0.6 %), not by resolution.
 22. **`half_count` and `edges_m`.** (τ, w) → n: (1, 1) 1, (0.4, 1) 0,
     (0.5, 1) 1, (2.5, 1) 3, (10, 1) 10, (10, 2.5) 4, (5, 1.216) 4,
     (127.4, 1) 127; (127.5, 1), (1, 0), (0, 1), (NaN, 1): `ValueError`.
@@ -780,7 +793,7 @@ peak resident memory each.
 
 ## 9. Size
 
-Estimated +500 counted lines (third revision: the held-node test, the fold
+Estimated +507 counted lines (third revision: the held-node test, the fold
 and the sparse join +35, `HeightTable` +30, the source field and width
 resolution +15, the record entries +5; the fixed-count arrays −15):
 `height_shares.hpp` +120, `overlap.hpp` refactor +15, binding and
