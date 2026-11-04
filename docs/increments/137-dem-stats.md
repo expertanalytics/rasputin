@@ -874,3 +874,4 @@ off, head equals master in time and bytes on the fixture tile at tolerance
 flag on, the tile takes 0.52 s against 0.45 s (the "dem heights" phase 0.065
 s, predicted +0.06 s) and 10 MB more peak memory (section 7: about 9 MB); the
 mesh is unchanged by the flag in all 6 output files.
+- **Code review, round 2, 2026-11-04.** `@reviewer`, head `8163ac6efb5815e0c2b2532f682e7fd77892a062`, range `5cd53882..8163ac6e`. Verdict: CHANGES REQUESTED. LOC: 577 net. Kill record covers all 14 targets, W1 and H1 checked by hand; `@perf`'s section 8 run agrees with its files. Blocking: a false range in a new test's docstring, fixed by `@tester` in `1c5ab82c` (tests only; the range is n + 3/2 m, not n + ½, checked by brute force). Follow-up done: the design's three extra mutants (resampled grid, shared accumulator, flag ignored in `_write_piece`) are all killed, rows 15-17 of the kill record.

@@ -618,3 +618,11 @@ Two real survivors, each killed by a new test in its own commit:
 - test_cli_mesh_dem_heights.py::TestReprojected::test_the_oracle_on_the_sources_pixels
 - test_dem_height_shares.py::TestNoHeldNode::test_held_nodes_all_nodata_with_valid_pieces_take_the_mean
 - test_dem_height_shares.py::TestNoHeldNode::test_the_mean_residual_not_the_pieces_spread
+
+## The design's extra mutants (`@tester`, after code review round 2; scratch copy of a1d6c1d9 with HEAD's tests)
+
+| # | target | mutant | where | result |
+|---|---|---|---|---|
+| 15 | resampled grid on the reprojected path | the tile's windows, `mesh_crs` None | cli.py:3710, 3738, 3912 | killed, 2: TestReprojected::test_spread_and_class_0_share_are_the_sources, ::test_the_oracle_on_the_sources_pixels |
+| 16 | shared accumulator across threads | `weight` moved outside the per-block lambda | hpp:116 | killed, 6, in 3 of 3 runs: test_dem_height_shares TestThreads::test_threads_1_2_7_and_all_give_equal_bytes; cli TestThreads::test_equal_arrays, TestCutRun::test_every_triangle_of_every_piece_against_the_oracle, TestTriangles::test_the_edges_follow_the_chosen_tolerance, both TestReprojected tests. The C++ prop_statistics_height_shares test does not kill it (3 runs). |
+| 17 | flag ignored in `_write_piece` | `dem_heights=None`, `face_heights=None`, no edges comment | cli.py:2779, 2786, 2789 | killed, 3: cli TestThreads::test_equal_arrays, TestCutRun::test_every_piece_file_states_the_edges, ::test_every_triangle_of_every_piece_against_the_oracle |
