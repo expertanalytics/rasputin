@@ -866,3 +866,11 @@ killed. With the two new tests the 137 suite passes 173 of 173.
 ## Review
 
 - **Code review, round 1, 2026-11-04.** `@reviewer`, head `5cd53882f18c02a93cd51627b2c11728a25d5e75`, range `98fe80c3..5cd53882`. Verdict: CHANGES REQUESTED. LOC: 577 net (estimate 507). Code sound; land cover's bytes unchanged; keep_source only under the flag; .ply encoder byte-identical; public hygiene clean. Blocking: the kill record pointed to a handback not in the branch (now recorded above); `@perf`'s section 8 timings and peak memory are owed. Follow-ups queued (dem-stats-followups).
+
+`@perf`'s section 8 run (`docs/benchmarks/2026-11-04/137-dem-heights/README.md`,
+`bb8ef4d1`, AC power, median of 5 interleaved repeats, no gate): with the flag
+off, head equals master in time and bytes on the fixture tile at tolerance
+10, a 4-piece cut of the quarter domain, and Velhas reprojected; with the
+flag on, the tile takes 0.52 s against 0.45 s (the "dem heights" phase 0.065
+s, predicted +0.06 s) and 10 MB more peak memory (section 7: about 9 MB); the
+mesh is unchanged by the flag in all 6 output files.
