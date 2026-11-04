@@ -834,3 +834,19 @@ layering row `_core io.models land_cover_fractions target_grid`, with
 `class_areas` digests are keyed by platform (fused multiply-add can change the
 last bit), so CI's Linux pytest skips them; the `--triangles` case has τ
 2.05 m, n = 2. Default taken: the stand-in's CLI re-decodes the DEM file.
+
+Green `a1d6c1d9` (`@developer`): 577 counted lines (estimate 507, limit
+700); pytest 11,749 passed, ctest 1,052; `-Werror` clean; ASan+UBSan, TSan
+and `-ffp-contract=off` pass on the two touched C++ suites; land cover's
+`class_areas` digests unchanged. Fixture at `--tolerance 10`: 0.51 s with
+the flag, 0.45 s without (median of 3; predicted +0.06 s). *Assumed by
+`@developer`:* `Refined` carries the table as `object` (test_layering forbids
+`refine_job` importing `io.models`), cast back in `basin_run` and `cli`;
+`How` carries `dem_heights`, `dem_class_m` and `source`, and `assemble_dem`/
+`load_piece` gain `keep_source` so the source DEM is held only under the
+flag; the `.ply` face block is one generic encoder (byte-identity tests
+pass); `.gpkg` adds `dem_nodata_share` by `ALTER TABLE`; the reader takes
+`class_m` from `dem_height_class_m`, else from the first class's edges; the
+shared refusals live in `overlap.hpp`, and `class_areas`' wording for a
+corner past the window changed from "class window" to "window" (no test
+reads it).
