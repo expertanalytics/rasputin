@@ -64,9 +64,17 @@ def row_areas(window: ClassWindow, crs: str) -> npt.NDArray[np.float64]:
     sphere): `CRS.get_geod()` differs from it in the last bits for WGS 84. A
     cell's area does not depend on its longitude, so every row is measured at
     longitude 0."""
+    return grid_row_areas(window.y_max, window.delta_x, window.delta_y, window.rows, crs)
+
+
+def grid_row_areas(
+    top: float, delta_x: float, delta_y: float, rows: int, crs: str
+) -> npt.NDArray[np.float64]:
+    """`row_areas` for `rows` rows of `delta_x` by `delta_y` cells in `crs`,
+    the first row's upper edge at `top`."""
     parsed = parse_crs(crs)
     if not parsed.is_geographic:
-        return np.full(window.rows, window.delta_x * window.delta_y, dtype=np.float64)
+        return np.full(rows, delta_x * delta_y, dtype=np.float64)
     ellipsoid = parsed.ellipsoid
     assert ellipsoid is not None, f"{crs} has no ellipsoid"
     rf = ellipsoid.inverse_flattening
@@ -75,12 +83,12 @@ def row_areas(window: ClassWindow, crs: str) -> npt.NDArray[np.float64]:
         if rf
         else Geod(a=ellipsoid.semi_major_metre, f=0.0)
     )
-    lons = [0.0, window.delta_x, window.delta_x, 0.0]
-    out = np.empty(window.rows, dtype=np.float64)
-    for r in range(window.rows):
-        top = window.y_max - r * window.delta_y
+    lons = [0.0, delta_x, delta_x, 0.0]
+    out = np.empty(rows, dtype=np.float64)
+    for r in range(rows):
+        upper = top - r * delta_y
         area, _ = geod.polygon_area_perimeter(
-            lons, [top, top, top - window.delta_y, top - window.delta_y]
+            lons, [upper, upper, upper - delta_y, upper - delta_y]
         )
         out[r] = abs(float(area))
     return out

@@ -143,6 +143,9 @@ class RemoteSource(BaseModel):
     named_by: NamedBy | None = None
     #: The worst position error the distributor states for the features, in metres.
     position_error_m: PositiveFloat | None = None
+    #: One standard deviation of the difference of two nearby heights, in
+    #: metres, as the distributor states it or as its LE90 / 1.645.
+    relative_vertical_accuracy_m: PositiveFloat | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -163,6 +166,8 @@ class RemoteSource(BaseModel):
             )
         if self.position_error_m is not None and self.values != "features":
             raise ValueError(f"position_error_m: refused for a source of {self.values}")
+        if self.relative_vertical_accuracy_m is not None and self.values != "heights":
+            raise ValueError(f"relative_vertical_accuracy_m: refused for a source of {self.values}")
         if self.fields and self.kind != "arcgis-features":
             raise ValueError(f"fields: refused for {self.kind}")
         if self.kind == "arcgis-features":

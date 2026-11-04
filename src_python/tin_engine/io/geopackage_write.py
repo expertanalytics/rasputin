@@ -16,6 +16,7 @@ import sqlite3
 import struct
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from itertools import pairwise
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -26,7 +27,14 @@ from shapely.geometry.base import BaseGeometry
 
 from tin_engine.features import EdgeVocabulary
 from tin_engine.io.geopackage import APPLICATION_ID
-from tin_engine.io.models import SHARES, UNDEFINED_SRS, CellTable, ClassFractions, SrsEntry
+from tin_engine.io.models import (
+    SHARES,
+    UNDEFINED_SRS,
+    CellTable,
+    ClassFractions,
+    HeightTable,
+    SrsEntry,
+)
 
 #: What every ``last_change`` and ``update_time`` says, so the same run gives
 #: the same bytes.
@@ -375,6 +383,43 @@ def write_fractions(conn: sqlite3.Connection, fractions: ClassFractions) -> None
         )
     conn.execute("CREATE INDEX land_cover_fractions_triangle ON land_cover_fractions (triangle)")
     _register_attributes(conn, "land_cover_fractions")
+
+
+def write_heights(conn: sqlite3.Connection, heights: HeightTable) -> None:
+    """The DEM height shares: the ``triangles`` column ``dem_nodata_share``,
+    the ``dem_height_shares`` attributes table, one row per (triangle, class)
+    of every span, zeros kept, ``triangle`` the triangle's ``fid``, and
+    ``dem_height_classes``, one row per class index with its edges in metres."""
+    count = heights.count
+    rows = np.repeat(np.arange(1, len(count) + 1), count)
+    classes = np.repeat(heights.first.astype(np.int64), count)
+    classes += np.arange(len(rows)) - np.repeat(heights.offsets[:-1].astype(np.int64), count)
+    edges = heights.edges_m.tolist()
+    conn.execute("ALTER TABLE triangles ADD COLUMN dem_nodata_share REAL")
+    conn.execute(
+        "CREATE TABLE dem_height_shares (fid INTEGER PRIMARY KEY, triangle INTEGER, "
+        "class INTEGER, share REAL)"
+    )
+    conn.execute(
+        "CREATE TABLE dem_height_classes (fid INTEGER PRIMARY KEY, class INTEGER, "
+        "lower_m REAL, upper_m REAL)"
+    )
+    with _transaction(conn):
+        conn.executemany(
+            "UPDATE triangles SET dem_nodata_share = ? WHERE fid = ?",
+            zip(heights.nodata.tolist(), range(1, len(count) + 1), strict=True),
+        )
+        conn.executemany(
+            "INSERT INTO dem_height_shares VALUES (NULL, ?, ?, ?)",
+            zip(rows.tolist(), classes.tolist(), heights.shares.tolist(), strict=True),
+        )
+        conn.executemany(
+            "INSERT INTO dem_height_classes VALUES (NULL, ?, ?, ?)",
+            ((c, lo, hi) for c, (lo, hi) in enumerate(pairwise(edges))),
+        )
+    conn.execute("CREATE INDEX dem_height_shares_triangle ON dem_height_shares (triangle)")
+    _register_attributes(conn, "dem_height_shares")
+    _register_attributes(conn, "dem_height_classes")
 
 
 def write_lines(

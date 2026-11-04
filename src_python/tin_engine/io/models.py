@@ -263,6 +263,51 @@ class ClassFractions(BaseModel):
         return len(self.offsets) - 1
 
 
+class HeightTable(BaseModel):
+    """Each triangle's DEM height shares: triangle `t`'s shares are
+    `[offsets[t], offsets[t + 1])`, of class indices `first[t]` onward, class
+    `c` lying between `edges_m[c]` and `edges_m[c + 1]` (metres about the
+    triangle's plane); `nodata[t]` is its share over NoData, `class_m` the
+    class width. Frozen; arrays kept as given, another dtype refused."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    offsets: npt.NDArray[np.uint32]
+    first: npt.NDArray[np.int32]
+    shares: npt.NDArray[np.float32]
+    nodata: npt.NDArray[np.float32]
+    edges_m: npt.NDArray[np.float64]
+    class_m: float
+
+    @field_validator("offsets", "first", "shares", "nodata", "edges_m")
+    @classmethod
+    def _one_dimensional(cls, value: npt.NDArray[Any], info: ValidationInfo) -> npt.NDArray[Any]:
+        want = {"offsets": np.uint32, "first": np.int32, "edges_m": np.float64}
+        dtype = want.get(str(info.field_name), np.float32)
+        if not isinstance(value, np.ndarray) or value.ndim != 1 or value.dtype != dtype:
+            raise ValueError(f"{info.field_name} must be 1-D {np.dtype(dtype)}")
+        return value
+
+    @model_validator(mode="after")
+    def _rows_index_the_shares(self) -> Self:
+        offsets, edges = self.offsets.astype(np.int64), self.edges_m
+        if len(offsets) == 0 or offsets[0] != 0 or (np.diff(offsets) < 0).any():
+            raise ValueError("offsets must start at 0 and never decrease")
+        if offsets[-1] != len(self.shares):
+            raise ValueError(f"offsets end at {offsets[-1]} for {len(self.shares)} shares")
+        if not len(self.first) == len(self.nodata) == len(offsets) - 1:
+            raise ValueError("first and nodata must hold one value per triangle")
+        if len(edges) < 2 or len(edges) % 2 or (np.diff(edges) <= 0).any():
+            raise ValueError("edges_m must be an even number, at least 2, increasing")
+        if (self.first < 0).any() or (self.first + self.count > len(edges) - 1).any():
+            raise ValueError("a row of first and its count runs past the classes")
+        return self
+
+    @property
+    def count(self) -> npt.NDArray[np.int64]:
+        return self.offsets[1:].astype(np.int64) - self.offsets[:-1].astype(np.int64)
+
+
 class CellTable(BaseModel):
     """One hydrological cell per triangle, in triangle order: the plan
     centroid with the mean corner height (T, 3), plan area, slope and aspect

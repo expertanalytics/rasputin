@@ -21,7 +21,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
-from typing import Protocol
+from typing import Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -38,13 +38,13 @@ from tin_engine.io.mesh_index import (
     SeamRecord,
     check_conformity,
 )
-from tin_engine.io.models import DemTile, IndexWindow, RasterMeta, valid_mask
+from tin_engine.io.models import DemTile, HeightTable, IndexWindow, RasterMeta, valid_mask
 from tin_engine.pieces import piece_ids, seam_records, start_slice
 from tin_engine.raster import to_core
 from tin_engine.refine_job import How, Once, Refined, RunError
 from tin_engine.run_record import Value
 from tin_engine.stats import PhaseClock
-from tin_engine.target_grid import Block, TargetGrid
+from tin_engine.target_grid import Block, SourceWindows, TargetGrid
 
 #: The nodes a piece's window reaches past its cell on each side. Not free to
 #: change: a piece's bytes depend on how far its raster reaches.
@@ -53,8 +53,8 @@ MARGIN = 1
 
 class Loaded(Protocol):
     """One piece's DEM, as `load` gives it: its tile, whose node (0, 0) is
-    the run window's ``(row0, col0)``, and on a resampled run its sub-grid
-    and check points."""
+    the run window's ``(row0, col0)``, and on a resampled run its sub-grid,
+    check points and, for the height shares, the source's windows."""
 
     @property
     def tile(self) -> DemTile: ...
@@ -66,6 +66,8 @@ class Loaded(Protocol):
     def grid(self) -> TargetGrid | None: ...
     @property
     def checks(self) -> Iterable[Block] | None: ...
+    @property
+    def source(self) -> SourceWindows | None: ...
 
 
 #: A piece's refine, given by `cli.py` (its `_refined`): the held window, the
@@ -109,6 +111,7 @@ class Piece:
     values: Mapping[str, Value]  # its own record entries, never the run's
     window: PieceWindow
     on_frozen: int
+    heights: HeightTable | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,7 +250,8 @@ def cut_run(
         keep = labels == p
         corners = corner_heights(dem, cut, snap, xy, np.intersect1d(seams, tris[keep]).tolist())
         piece = start_slice(xy, tris, flags, edges, masks, keep, seam, seam_pass, fixed=corners)
-        mine, held = replace(how, grid=dem.grid, checks=dem.checks), Once(dem.tile)
+        mine = replace(how, grid=dem.grid, checks=dem.checks, source=dem.source)
+        held = Once(dem.tile)
         # The constraints travel in `edges` and `masks`; refine reads no flag.
         zeros = np.zeros(len(piece.triangles), dtype=np.uint8)
         mesh = indexed_mesh(piece.vertices, piece.triangles, zeros)
@@ -256,7 +260,9 @@ def cut_run(
         place = PieceWindow(
             row0=cut.row0 + w.row0, col0=cut.col0 + w.col0, rows=w.rows, cols=w.cols
         )
-        return records, write(Piece((j, i, k), done.trimmed, done.values, place, done.on_frozen))
+        heights = cast(HeightTable | None, done.heights)
+        made = Piece((j, i, k), done.trimmed, done.values, place, done.on_frozen, heights)
+        return records, write(made)
 
     entries, records = [], []
     for p, (j, i, k) in enumerate(ids):

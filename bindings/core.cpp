@@ -31,6 +31,7 @@
 #include <terrain/refinement/refine_points.hpp>
 #include <terrain/refinement/seam.hpp>
 #include <terrain/refinement/slope_tolerance.hpp>
+#include <terrain/statistics/height_shares.hpp>
 #include <terrain/vector_simplify/area_collapse.hpp>
 #include <terrain/vector_simplify/border_collapse.hpp>
 
@@ -1588,5 +1589,63 @@ a TypeError); row_area the area of one cell of each row. A corner past the
 closed window [0, cols] x [0, rows] is a ValueError saying outside; so is a
 zero-area triangle, a non-finite corner or a wrong shape. threads only splits
 the work (0: all cores); the result does not depend on it. Releases the GIL.
+)doc");
+
+    m.def(
+        "dem_height_shares",
+        [](const py::object& corners, const py::object& z, const py::object& dem, std::optional<double> nodata,
+           const py::object& row_area, double class_m, int half, unsigned threads) {
+            const auto xy = F64::ensure(corners);
+            if (!xy || xy.ndim() != 3 || xy.shape(1) != 3 || xy.shape(2) != 2)
+                throw py::value_error("dem_height_shares: corners must be float64 of shape (T, 3, 2)");
+            const auto zs = F64::ensure(z);
+            if (!zs || zs.ndim() != 2 || zs.shape(0) != xy.shape(0) || zs.shape(1) != 3)
+                throw py::value_error("dem_height_shares: z must be float64 of shape (T, 3)");
+            const auto weights = F64::ensure(row_area);
+            if (!weights || weights.ndim() != 1)
+                throw py::value_error("dem_height_shares: row_area must be float64 of shape (rows,)");
+            const terrain::raster::RasterGeometry unit{0.0, 0.0, 1.0, 1.0, 1, 1};
+            auto grid = rasputin_bindings::try_view<CoreRasterTag, float>(dem, &unit, nodata);
+            if (!grid)
+                grid = rasputin_bindings::try_view<CoreRasterTag, double>(dem, &unit, nodata);
+            if (!grid)
+                throw py::type_error("dem_height_shares: dem must be a C-contiguous float32 or float64 array; "
+                                     "convert it explicitly rather than have it copied");
+            const std::span<const Point2> pts{reinterpret_cast<const Point2*>(xy.data()), static_cast<std::size_t>(3 * xy.shape(0))};
+            const std::span<const double> heights{zs.data(), static_cast<std::size_t>(zs.size())};
+            const std::span<const double> rows{weights.data(), static_cast<std::size_t>(weights.shape(0))};
+            terrain::statistics::HeightShares out;
+            {
+                const py::gil_scoped_release unlocked;  // every buffer is held by a local
+                out = std::visit([&](const auto& view) {
+                    return terrain::statistics::height_shares(pts, heights, view, rows, class_m, half, threads);
+                }, grid->view);
+            }
+            const auto copy = [](const auto& v) {
+                py::array_t<typename std::decay_t<decltype(v)>::value_type> a(static_cast<py::ssize_t>(v.size()));
+                std::copy(v.begin(), v.end(), a.mutable_data());
+                return a;
+            };
+            return py::make_tuple(copy(out.offsets), copy(out.first), copy(out.shares), copy(out.nodata));
+        },
+        py::arg("corners"), py::arg("z"), py::arg("dem"), py::arg("nodata"), py::arg("row_area"), py::kw_only(),
+        py::arg("class_m"), py::arg("half"), py::arg("threads") = 0, R"doc(
+Each triangle's share of area per height class about its own plane, as
+(offsets, first, shares, nodata): uint32 (T + 1,), int32 (T,), float32 (S,)
+and float32 (T,). Triangle t's shares are [offsets[t], offsets[t + 1]), of
+class indices first[t], first[t] + 1, ...; class index c holds residuals in
+[(c - half - 1/2) class_m, (c - half + 1/2) class_m), the end classes clamped.
+A triangle's classes run over those of the DEM nodes it holds; pieces of
+pixels centred outside fold into the nearer end; one holding no node has the
+class of its mean residual. nodata[t] is its area share over NoData pixels
+(the sentinel, or NaN); with the shares it sums to 1.
+
+corners is (T, 3, 2) in the DEM's index space (pixel (r, c) the square
+[c, c + 1] x [r, r + 1], its node at the centre), z (T, 3) the corner
+heights, dem a C-contiguous 2-D float32 or float64 array (another dtype is a
+TypeError), row_area one pixel area per row. A corner past the closed window
+is a ValueError saying outside; so is a zero-area triangle, a non-finite
+corner or height, class_m not finite and above 0, half outside 0 ... 127, or
+a wrong shape. threads only splits the work (0: all cores). Releases the GIL.
 )doc");
 }

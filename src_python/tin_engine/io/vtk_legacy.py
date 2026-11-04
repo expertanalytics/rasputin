@@ -41,7 +41,7 @@ import numpy.typing as npt
 
 from tin_engine.features import EdgeVocabulary
 from tin_engine.io.mesh_checks import check_int32, checked_ascii
-from tin_engine.io.models import ClassFractions
+from tin_engine.io.models import ClassFractions, HeightTable
 
 #: The names this module writes into `FieldData` itself.
 #: ``elevation`` is the point array of heights, so no dataset
@@ -50,9 +50,17 @@ from tin_engine.io.models import ClassFractions
 #: ``land_cover_code``; the three ``land_cover_*`` arrays are the sparse
 #: table of class fractions.
 FRACTION_ARRAYS = ("land_cover_offsets", "land_cover_classes", "land_cover_fractions")
+#: The sparse table of DEM height shares, and its class edges.
+HEIGHT_ARRAYS = (
+    "dem_height_shares",
+    "dem_height_offsets",
+    "dem_height_first",
+    "dem_height_edges_m",
+)
 RESERVED = frozenset(
     {"feature_bits", "feature_names", "feature_vocabulary", "elevation", "land_cover_codes"}
     | set(FRACTION_ARRAYS)
+    | set(HEIGHT_ARRAYS)
 )
 
 #: The cell array of land-cover codes. Not ``land_cover``: that is the name of
@@ -80,6 +88,7 @@ def write_vtk(
     land_cover_codes: str = "",
     class_fractions: ClassFractions | None = None,
     triangle_filled: npt.ArrayLike | None = None,
+    dem_heights: HeightTable | None = None,
 ) -> bytes:
     """Encode one mesh and its constraint edges as legacy VTK 4.2 PolyData.
 
@@ -102,6 +111,10 @@ def write_vtk(
         triangle_filled: `(T,)` true where a code was filled, written with
             `triangle_codes` as the `int` cell array `land_cover_filled`, 0 on
             every line.
+        dem_heights: the DEM height shares per triangle, written as the
+            dataset arrays of `HEIGHT_ARRAYS` (`float`, `unsigned_int`, `int`,
+            `double`) and the `float` cell array `dem_nodata_share`, 0 on
+            every line.
 
     Raises:
         ValueError: if `vertices` is not `(N, 3)`; if `edge_masks` does not
@@ -110,7 +123,7 @@ def write_vtk(
             reserved; if a string is not ASCII or has a control character; or
             if `triangle_codes` has not one entry per triangle, does not fit
             int32, or comes with a vocabulary naming `land_cover_code`; or if
-            `class_fractions` has not one row per triangle.
+            `class_fractions` or `dem_heights` has not one row per triangle.
     """
     points = np.asarray(vertices, dtype=np.float64)
     if points.ndim != 2 or points.shape[1] != 3:
@@ -139,6 +152,10 @@ def write_vtk(
         raise ValueError(
             f"class_fractions has {class_fractions.triangles} rows, {len(polygons)} triangles"
         )
+    if dem_heights is not None and len(dem_heights.first) != len(polygons):
+        raise ValueError(
+            f"dem_heights has {len(dem_heights.first)} rows, {len(polygons)} triangles"
+        )
     used = {name for mask in np.unique(masks) for name in vocabulary.names(int(mask))}
     cell_masks = np.concatenate([masks, np.zeros(len(polygons), dtype=np.uint32)])
 
@@ -157,6 +174,18 @@ def write_vtk(
             _numeric(name, values, type_name, binary)
             for name, values, type_name in zip(FRACTION_ARRAYS, arrays, types, strict=True)
         ]
+    if dem_heights is not None:
+        heights: tuple[npt.NDArray[np.generic], ...] = (
+            dem_heights.shares,
+            dem_heights.offsets,
+            dem_heights.first,
+            dem_heights.edges_m,
+        )
+        kinds = ("float", "unsigned_int", "int", "double")
+        dataset += [
+            _numeric(name, values, type_name, binary)
+            for name, values, type_name in zip(HEIGHT_ARRAYS, heights, kinds, strict=True)
+        ]
     features = [
         _numeric(name, (cell_masks >> bit) & 1, "unsigned_char", binary)
         for bit, name in table
@@ -170,6 +199,9 @@ def write_vtk(
         marks = np.zeros(len(lines) + len(polygons), dtype=np.int64)
         marks[len(lines) :] = np.asarray(triangle_filled).reshape(-1)
         features.append(_numeric("land_cover_filled", marks, "int", binary))
+    if dem_heights is not None:
+        share = np.concatenate([np.zeros(len(lines), np.float32), dem_heights.nodata])
+        features.append(_numeric("dem_nodata_share", share, "float", binary))
 
     out = [
         b"# vtk DataFile Version 4.2\nrasputin mesh\n",
