@@ -808,3 +808,29 @@ resolution +15, the record entries +5; the fixed-count arrays −15):
 
 None. The width's kind (relative, not absolute) was the main session's
 ruling, 2026-11-04.
+
+## As built
+
+Red `fa7cc0e3` (`@tester`), with `237447ff` updating plugin_api SIGNATURES on
+its own as that test asks (the PR body must say so). On `@tester`'s stand-in
+the Python suite passed (7,880) and the C++ tests passed; two older lists
+turned red and were fixed in red: test_layering (a new `dem_heights` row) and
+the RemoteSource signature.
+
+*Kill record on `fa7cc0e3`:* 35 mutants, 34 killed, 1 equivalent. The
+survivor, lower class edge `<` → `<=`, is repaired by the raise step after it
+(brute-forced over 145,460 values, 0 differences). Upper edge `>=` → `>` is
+killed only by a new case (w = 1.216, residual 7.5 w); test 4's figures kill
+neither edge mutant. Not planted: the resampled grid on the reprojected path
+(the stand-in does not hold that grid). Each mutant and its killing tests are
+in the red commit's docstrings.
+
+*Pinned by `@tester`:* the no-node mean residual is weighted by piece area ×
+row area; `.gpkg`'s `triangle` is the fid and `dem_height_classes` has one row
+per class; `.vtk`'s four arrays are one-component FieldData arrays; `.ply`'s
+edges comment is space-separated; refusals exit non-zero and write no file;
+layering row `_core io.models land_cover_fractions target_grid`, with
+`io.vtk_read` importing `io.models`; the new signature field comes last;
+`class_areas` digests are keyed by platform (fused multiply-add can change the
+last bit), so CI's Linux pytest skips them; the `--triangles` case has τ
+2.05 m, n = 2. Default taken: the stand-in's CLI re-decodes the DEM file.
