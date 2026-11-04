@@ -13,8 +13,8 @@ Bound on a share: 1e-7 absolute, the float32 rounding of a value at most 1
 first and count exactly.
 
 INVARIANT-CRITICAL (section 5): the overlap weights, the residual and the
-span. The kill record over section 5's mutation targets is in the red
-commit's handback.
+span. The kill record over section 5's mutation targets is
+`docs/increments/137-probes/kill-record.md`.
 
 PINNED BY THIS SUITE (the design names the call; the spelling here):
 `_core.dem_height_shares(corners, z, dem, nodata, row_area, *, class_m,
@@ -190,9 +190,13 @@ class TestClassEdges:
 
     def test_a_residual_past_n_plus_1_metres_stays_inside_the_classes(self) -> None:
         """The clamp is in units of w: at w = 2.5, n = 4, residuals of +6 and
-        -6 m lie past n + 1 = 5 but inside the classes (5 <= 6 < 7.5): classes
-        +2 and -2, not the end classes. Kills a quotient taken without the
-        division by w, whose early clamp then fires at 6 > 5."""
+        -6 m lie past n + 1 = 5 but inside the classes (5 < 6 < 8.75, the end
+        classes' edge): classes +2 and -2, not the end classes. Kills a
+        quotient taken without the division by w (`class_of`,
+        height_shares.hpp:65), whose early clamp then fires at
+        floor(6 + 1/2) = 6 > n + 1. That mutant errs on the residuals from
+        n + 3/2 m to (n - 1/2) w, either sign, a class not empty once
+        w > (n + 3/2) / (n - 1/2): here 5.5 to 8.75 m."""
         dem = np.zeros((6, 6))
         dem[0, 0], dem[0, 1] = 6.0, -6.0
         table = shares_of([EDGE_TRIANGLE], [0, 0, 0], dem, class_m=2.5, half=4)
