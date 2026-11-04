@@ -822,8 +822,8 @@ survivor, lower class edge `<` → `<=`, is repaired by the raise step after it
 (brute-forced over 145,460 values, 0 differences). Upper edge `>=` → `>` is
 killed only by a new case (w = 1.216, residual 7.5 w); test 4's figures kill
 neither edge mutant. Not planted: the resampled grid on the reprojected path
-(the stand-in does not hold that grid). Each mutant and its killing tests are
-in the red commit's docstrings.
+(the stand-in does not hold that grid). Superseded by the kill record on green
+`a1d6c1d9` below.
 
 *Pinned by `@tester`:* the no-node mean residual is weighted by piece area ×
 row area; `.gpkg`'s `triangle` is the fid and `dem_height_classes` has one row
@@ -850,3 +850,19 @@ pass); `.gpkg` adds `dem_nodata_share` by `ALTER TABLE`; the reader takes
 shared refusals live in `overlap.hpp`, and `class_areas`' wording for a
 corner past the window changed from "class window" to "window" (no test
 reads it).
+
+*Kill record on green `a1d6c1d9`* (`@tester`, after code review round 1;
+full table and every killing test per mutant in
+`docs/increments/137-probes/kill-record.md`): 34 mutants over all 14 targets.
+Two survived the red suite and each now has a killing test in its own
+commit: dropping the division by w (hpp:65), killed by `aeeda8b9`; raising
+half_count with `<` (dem_heights.py:46), killed by `483ce7a9`. Equivalent,
+with reasons: lower edge `<` to `<=` (the raise step repairs it), the
+half_count lowering step and floor without ½ (the raise step repairs both),
+the early clamps (they guard only an integer overflow), and no whole-pixel
+shortcut (a clipped unit square has area exactly 1). Every other mutant is
+killed. With the two new tests the 137 suite passes 173 of 173.
+
+## Review
+
+- **Code review, round 1, 2026-11-04.** `@reviewer`, head `5cd53882f18c02a93cd51627b2c11728a25d5e75`, range `98fe80c3..5cd53882`. Verdict: CHANGES REQUESTED. LOC: 577 net (estimate 507). Code sound; land cover's bytes unchanged; keep_source only under the flag; .ply encoder byte-identical; public hygiene clean. Blocking: the kill record pointed to a handback not in the branch (now recorded above); `@perf`'s section 8 timings and peak memory are owed. Follow-ups queued (dem-stats-followups).
