@@ -717,7 +717,7 @@ CLI fixtures are paths, so w = 1 m. Third revision: tests 1, 2, 4-9, 10,
     the mean count strictly falls, the one-class share never falls, every
     count is at most 2n + 1 (9, 5, 3, 1), and at 0.4 every count is 1.
     The one-class share is monotone only from tolerance 4 down: at 8 and
-    4 it counts 4 and 9 triangles of 50-350 m² (1-4 pixels; probe), so it
+    4 it counts 4 and 9 triangles of 50-350 m² (½-3½ pixels of 100 m²; probe), so it
     moves by whole slivers (0.7 → 0.6 %), not by resolution.
 22. **`half_count` and `edges_m`.** (τ, w) → n: (1, 1) 1, (0.4, 1) 0,
     (0.5, 1) 1, (2.5, 1) 3, (10, 1) 10, (10, 2.5) 4, (5, 1.216) 4,
