@@ -363,7 +363,7 @@ width, plan area (three vertices away), a histogram of the resampled grid.
    of 3.3 is 1.4e-6), for every triangle.
 3. **Each pixel's area once:** over all triangles of a run (all pieces of a
    cut run), the weights a pixel gives sum to its area inside the written
-   mesh, to rounding (1e-9 relative).
+   mesh, to rounding (1e-9 relative in double; 1e-6 through the float32 shares).
 4. **Source, not resample:** on the reprojected path no share depends on
    the resampled grid's values.
 5. **Thread count changes nothing:** the arrays are byte-identical for any
@@ -413,7 +413,7 @@ share}; unlisted classes and nodata are 0.
    random triangulations of a rectangle in index space with off-node fans;
    for 20 random pixels each, the pixel set to 100 m and the rest 0 with
    corner z 0: Σ over triangles of (plan area × share of class +11) equals
-   the pixel's area inside the rectangle within 1e-9 relative.
+   the pixel's area inside the rectangle within 1e-6 relative (float32 shares).
 10. **Cut run.** `pieces_fixtures` `hills()`, `SQUARE`, tolerance 1,
     `--pieces 4 --dem-heights`: 4 piece files, 1,163 triangles; a Python
     oracle (shapely clip in index space, centroid residual) over every
@@ -424,9 +424,11 @@ share}; unlisted classes and nodata are 0.
     `row_areas` per row): shares within 1e-4. Area-weighted spread 1.289 m
     and class-0 share 0.213 (probe), asserted within 0.01 and 0.005; the
     resampled grid gives 1.219 m and 0.225, outside both.
-12. **Off is byte-identical.** Tests 1, 10 and 11 and a `.gpkg` of test 1
-    without the flag: sha256 equal to digests recorded at `98fe80c3`
-    (constants in the test; that commit named in a comment).
+12. **Off is byte-identical.** Tests 1, 10 and 11, a `.gpkg` of test 1
+    without the flag, and `class_areas`'s three arrays on `TestThreads`' input
+    in `tests/python/test_land_cover_overlap.py`: sha256 equal to digests
+    recorded at `98fe80c3` (constants in the test; that commit named in a
+    comment).
 13. **Threads.** Test 8's 5 m case through the binding, and test 10's run,
     at threads 1, 2 and 7: equal bytes.
 14. **Formats agree.** Test 1 as `.vtk`, `.ply` and `.gpkg`: the same
@@ -454,7 +456,7 @@ ignored (7); NoData counted in class 0 (2, 3); the denominator without
 NoData (2: 32/49 for 16/25); the resampled grid on the reprojected path
 (11); a shared accumulator across threads (13); the flag ignored in
 `_write_piece` (10); anything written when off (12); lines not
-zero-padded (14); `class_areas`'s visitor reordered (the land-cover suite).
+zero-padded (14); `class_areas`'s visitor reordered (12).
 
 ## 6. Degeneracies
 
