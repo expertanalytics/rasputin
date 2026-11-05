@@ -14,10 +14,10 @@ history keeps what `replace` and `drop` remove.
 `add` and `replace` need Ola's agreement to the wording: `--ola`, words found in
 this session's transcript as `brief.py --ola` finds them, or `--question <id>`, a
 question `questions.py` stored whose text holds the line and whose answer is
-one of `AGREE`. Each `search` appends its time and
-words to `<git-common-dir>/findings-searches.jsonl`, untracked; `questions.py
-add` and design or probe briefs (`brief.py`) refuse through `unsearched` until
-a search ran in the last hour. Standard library only.
+one of `AGREE`, alone or with the box's `RECOMMENDED` suffix. Each `search`
+appends its time and words to `<git-common-dir>/findings-searches.jsonl`,
+untracked; `questions.py add` and design or probe briefs (`brief.py`) refuse
+through `unsearched` until a search ran in the last hour. Standard library only.
 """
 
 from __future__ import annotations
@@ -41,6 +41,8 @@ LIMIT = 160
 WINDOW = timedelta(hours=1)
 #: Chosen: whole answers that agree; anything else, "Yes, but ..." too, is refused.
 AGREE = {"yes", "agree", "agreed", "ok", "approve", "approved"}
+#: The question box's suffix on a click of the recommended option, as in "Yes (Recommended)".
+RECOMMENDED = " (Recommended)"
 
 
 class RefusedError(Exception):
@@ -84,7 +86,7 @@ def _answered(args: argparse.Namespace, store: Path) -> str:
         raise RefusedError(f"there is no question {qid}")
     if record["state"] != "answered":
         raise RefusedError(f"question {qid} is not answered")
-    if record["words"].strip(" .!").casefold() not in AGREE:
+    if record["words"].removesuffix(RECOMMENDED).strip(" .!").casefold() not in AGREE:
         raise RefusedError(f'Ola did not agree to question {qid}: "{record["words"]}"')
     if " ".join(args.text.split()) not in " ".join(record["text"].split()):
         raise RefusedError(f"question {qid} does not hold this line")
