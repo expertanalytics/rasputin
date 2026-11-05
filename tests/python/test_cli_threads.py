@@ -295,7 +295,6 @@ class TestT7EveryCoreCallGetsTheCount:
     def test_dem_height_shares(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """`docs/increments/137-dem-stats.md`, 3.4: the binding takes `threads`."""
         import tin_engine.dem_heights as dem_heights
-
         from test_cli_mesh_dem_heights import write_steps
 
         shares = Calls(monkeypatch, dem_heights._core, "dem_height_shares")
