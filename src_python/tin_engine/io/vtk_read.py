@@ -1,7 +1,7 @@
 """Reads back the binary legacy VTK that `rasputin mesh` writes: bytes in, arrays out.
 
 Only rasputin's own files (second header line `rasputin mesh`), binary only:
-the dataset strings `crs` and `land_cover_codes`, the points, the triangles,
+the dataset strings `crs`, `land_cover_codes` and `tolerance_m`, the points, the triangles,
 the cell arrays `land_cover_code` and `land_cover_filled`, and the DEM height
 table (`HEIGHT_TYPES` and its cell array `dem_nodata_share`); constraint lines
 and every other array are skipped. Pure: no path, no file.
@@ -38,7 +38,9 @@ class MeshArrays:
     `land_cover_code` `(T,)` int32, one per triangle, or None when the file has
     none, `land_cover_codes` the text saying what the codes are, or "", and
     `land_cover_filled` `(T,)` int32, 1 where a code was filled, or None;
-    `dem_heights` the DEM height table, or None when the file has none."""
+    `dem_heights` the DEM height table, or None when the file has none;
+    `tolerance_m` the vertical tolerance in metres the mesh was built to, or
+    None in a file without the `tolerance_m` string."""
 
     vertices: npt.NDArray[np.float64]
     triangles: npt.NDArray[np.int64]
@@ -47,6 +49,7 @@ class MeshArrays:
     land_cover_codes: str = ""
     land_cover_filled: npt.NDArray[np.int32] | None = None
     dem_heights: HeightTable | None = None
+    tolerance_m: float | None = None
 
 
 class _Cursor:
@@ -147,6 +150,7 @@ def read_mesh(data: bytes) -> MeshArrays:
         strings.get("land_cover_codes", ""),
         arrays.get("land_cover_filled"),
         _height_table(heights, strings.get("dem_height_class_m")),
+        float(strings["tolerance_m"]) if "tolerance_m" in strings else None,
     )
 
 
