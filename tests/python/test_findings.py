@@ -235,3 +235,68 @@ def test_the_commit_is_checked_in_the_ledgers_own_repository(paths: tuple[Path, 
     )
     run(ledger, "add", "A.", "--commit", own, "--topic=x", "--ola", AGREED)
     assert [e["commit"] for e in entries(ledger)] == [own]
+
+
+LINE = "Two delays in series slow the response twice over."
+
+
+def asked(paths: tuple[Path, Path], text: str, words: str | None) -> str:
+    """Store a question in the store beside the search record, answered with `words`."""
+    record = {"id": "q7", "kind": "question", "text": text, "default": "keep it",
+              "choices": [], "item": None, "source": "main", "state": "open", "words": None,
+              "at": STAMP}  # fmt: skip
+    store = paths[1].with_name("questions.jsonl")
+    lines = [record] + ([{**record, "state": "answered", "words": words}] if words else [])
+    store.parent.mkdir(parents=True, exist_ok=True)
+    store.write_text("".join(json.dumps(r) + "\n" for r in lines))
+    return "q7"
+
+
+def by_question(paths: tuple[Path, Path], qid: str, text: str = LINE) -> list[str]:
+    return run(paths, "add", text, "--commit", HEAD, "--topic=delay", "--question", qid)
+
+
+def test_an_answered_agreeing_question_lets_the_line_in(paths: tuple[Path, Path]) -> None:
+    qid = asked(paths, f'May the ledger say: "{LINE}"?', "Yes")
+    by_question(paths, qid)
+    [entry] = entries(paths)
+    assert entry["text"] == LINE and "q7" in str(entry["ola"]) and "Yes" in str(entry["ola"])
+
+
+def test_an_unanswered_question_is_refused(paths: tuple[Path, Path]) -> None:
+    qid = asked(paths, f'May the ledger say: "{LINE}"?', None)
+    with pytest.raises(findings.RefusedError, match="not answered"):
+        by_question(paths, qid)
+    assert not paths[0].exists()
+
+
+@pytest.mark.parametrize("words", ["Change it", "No", "Yes, but say three delays"])
+def test_an_answer_other_than_agreement_is_refused(paths: tuple[Path, Path], words: str) -> None:
+    qid = asked(paths, f'May the ledger say: "{LINE}"?', words)
+    with pytest.raises(findings.RefusedError, match="agree"):
+        by_question(paths, qid)
+    assert not paths[0].exists()
+
+
+def test_a_line_the_question_does_not_hold_is_refused(paths: tuple[Path, Path]) -> None:
+    qid = asked(paths, f'May the ledger say: "{LINE}"?', "Yes")
+    with pytest.raises(findings.RefusedError, match="does not hold"):
+        by_question(paths, qid, "Two delays in series slow the response.")
+    assert not paths[0].exists()
+
+
+def test_an_unknown_question_is_refused(paths: tuple[Path, Path]) -> None:
+    with pytest.raises(findings.RefusedError, match="no question"):
+        by_question(paths, "q9")
+
+
+def test_replace_takes_an_answered_question_too(paths: tuple[Path, Path]) -> None:
+    add(paths, "First result.", "a")
+    qid = asked(paths, f'May the ledger say: "{LINE}"?', "Agreed.")
+    run(paths, "replace", "1", LINE, "--question", qid)
+    assert [e["text"] for e in entries(paths)] == [LINE]
+
+
+def test_ola_and_question_together_are_refused(paths: tuple[Path, Path]) -> None:
+    with pytest.raises(SystemExit):
+        run(paths, "add", LINE, "--commit", HEAD, "--topic=x", "--ola", AGREED, "--question", "q7")
