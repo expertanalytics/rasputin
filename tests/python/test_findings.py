@@ -270,7 +270,15 @@ def test_an_unanswered_question_is_refused(paths: tuple[Path, Path]) -> None:
     assert not paths[0].exists()
 
 
-@pytest.mark.parametrize("words", ["Change it", "No", "Yes, but say three delays"])
+def test_a_click_on_the_recommended_yes_counts_as_agreement(paths: tuple[Path, Path]) -> None:
+    """The question box records a click on the recommended option with this suffix."""
+    by_question(paths, asked(paths, f'May the ledger say: "{LINE}"?', "Yes (Recommended)"))
+    assert [e["text"] for e in entries(paths)] == [LINE]
+
+
+@pytest.mark.parametrize(
+    "words", ["Change it", "No", "Yes, but say three delays", "No (Recommended)", "(Recommended)"]
+)
 def test_an_answer_other_than_agreement_is_refused(paths: tuple[Path, Path], words: str) -> None:
     qid = asked(paths, f'May the ledger say: "{LINE}"?', words)
     with pytest.raises(findings.RefusedError, match="agree"):
