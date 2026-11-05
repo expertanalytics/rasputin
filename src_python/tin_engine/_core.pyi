@@ -822,3 +822,28 @@ def class_areas(
     zero-area triangle, a non-finite corner or a wrong shape is a ValueError.
     ``threads`` 0 is all cores; the result does not depend on it. Releases
     the GIL."""
+
+def dem_height_shares(
+    corners: npt.ArrayLike,
+    z: npt.ArrayLike,
+    dem: npt.NDArray[np.float32] | npt.NDArray[np.float64],
+    nodata: float | None,
+    row_area: npt.ArrayLike,
+    *,
+    class_m: float,
+    half: int,
+    threads: int = 0,
+) -> tuple[
+    npt.NDArray[np.uint32], npt.NDArray[np.int32], npt.NDArray[np.float32], npt.NDArray[np.float32]
+]:
+    """Each triangle's share of area per height class about its own plane, as
+    ``(offsets, first, shares, nodata)``: triangle ``t``'s shares are
+    ``[offsets[t], offsets[t + 1])`` of class indices ``first[t]`` onward,
+    class index ``c`` holding residuals in ``[(c - half - 1/2) class_m,
+    (c - half + 1/2) class_m)``, the ends clamped; its classes span those of
+    the DEM nodes it holds, and ``nodata[t]`` is its share over NoData.
+    ``corners`` ``(T, 3, 2)`` in the DEM's index space, ``z`` ``(T, 3)``,
+    ``dem`` a C-contiguous 2-D float32 or float64 array (else a TypeError),
+    ``row_area`` one pixel area per row. A corner past the window, a zero-area
+    triangle, a non-finite input, ``class_m`` not finite and above 0, ``half``
+    outside 0 ... 127 or a wrong shape is a ValueError. Releases the GIL."""

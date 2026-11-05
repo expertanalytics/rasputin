@@ -360,6 +360,13 @@ add_terrain_test(test_land_cover_overlap unit/test_land_cover_overlap.cpp)
 target_link_libraries(test_land_cover_overlap PRIVATE Threads::Threads)
 target_link_libraries(test_border_collapse PRIVATE Threads::Threads)
 
+# Each triangle's DEM height shares (docs/increments/137-dem-stats.md, invariant
+# 3 and test 9): each pixel's area once over a triangulation. INVARIANT-CRITICAL
+# (section 5: the overlap weights, the residual and the span). The plain helper,
+# as for overlap.hpp, which it builds on. It starts threads.
+add_terrain_test(prop_statistics_height_shares property/prop_statistics_height_shares.cpp)
+target_link_libraries(prop_statistics_height_shares PRIVATE Threads::Threads)
+
 # The final check, increment 15c-1 (docs/increments/15c-geographic-dem.md, D4,
 # D5 and "Tests for @tester"): the check-point store (CP1), refine_points on
 # placed points (RP1, RP2, RP5 to RP8, the scan's tie-break, the unfrozen-store

@@ -735,3 +735,9 @@ class TestPositionError:
         entry = SOURCES["glo30"].model_dump(exclude_unset=True)
         with pytest.raises(ValueError, match="position_error_m"):
             RemoteSource.model_validate({**entry, "position_error_m": 5.0})
+
+    def test_a_relative_vertical_accuracy_is_refused_for_a_source_of_features(self) -> None:
+        """`docs/increments/137-dem-stats.md`, test 17: heights only."""
+        entry = SOURCES["nve-river-network"].model_dump(exclude_unset=True)
+        with pytest.raises(ValueError, match="relative_vertical_accuracy_m"):
+            RemoteSource.model_validate({**entry, "relative_vertical_accuracy_m": 1.0})

@@ -119,7 +119,8 @@ class DemInput:
     CRS (None without one), and the mosaic's disagreeing seams, reported
     rather than refused. On the reprojected path `tile` is the target
     grid's, `domain` is in the target CRS, and `checks` yields the source's
-    nodes there for the final check, with the grid and the DEM's CRS."""
+    nodes there for the final check, with the grid and the DEM's CRS, and
+    `source` the source's windows when they are kept for the height shares."""
 
     tile: DemTile
     plan: MosaicPlan
@@ -128,6 +129,7 @@ class DemInput:
     checks: Iterator[Block] | None = None
     grid: TargetGrid | None = None
     source_crs: str = ""
+    source: SourceWindows | None = None
 
 
 def repository_for(
@@ -184,7 +186,8 @@ class PiecePlan:
 class PieceDem:
     """One piece's DEM: its tile, whose node (0, 0) is the run window's
     `(row0, col0)`, the overlaps inside its window that disagree, and on the
-    reprojected path its sub-grid and its check points."""
+    reprojected path its sub-grid, its check points and, when kept, its
+    source's windows."""
 
     tile: DemTile
     row0: int
@@ -192,6 +195,7 @@ class PieceDem:
     seams: tuple[Seam, ...] = ()
     grid: TargetGrid | None = None
     checks: Iterator[Block] | None = None
+    source: SourceWindows | None = None
 
 
 def open_dem(request: DemRequest, resources: Resources | None = None) -> DemInput:
@@ -235,9 +239,12 @@ def plan_dem(request: DemRequest, resources: Resources | None = None) -> DemPlan
     return DemPlan(repository, plan, plan.meta, domain, grown)
 
 
-def assemble_dem(plan: DemPlan, resources: Resources | None = None) -> DemInput:
+def assemble_dem(
+    plan: DemPlan, resources: Resources | None = None, keep_source: bool = False
+) -> DemInput:
     """The run's DEM: the memory cap, the repository's check, then the
-    decode, and on the reprojected path the resample and the check points."""
+    decode, and on the reprojected path the resample and the check points,
+    and with `keep_source` the source's windows."""
     res = Resources.fallback() if resources is None else resources
     check_canvas(plan.mosaic, res.memory_budget)
     plan.repository.check(plan.mosaic)
@@ -253,6 +260,7 @@ def assemble_dem(plan: DemPlan, resources: Resources | None = None) -> DemInput:
         checks=_checks(plan, source, res.threads),
         grid=plan.grid,
         source_crs=plan.source_crs,
+        source=source if keep_source else None,
     )
 
 
@@ -275,9 +283,12 @@ def piece_plan(plan: DemPlan, window: IndexWindow) -> PiecePlan:
     return PiecePlan(window, restrict(plan.mosaic, source), source, sub)
 
 
-def load_piece(plan: DemPlan, piece: PiecePlan, resources: Resources | None = None) -> PieceDem:
+def load_piece(
+    plan: DemPlan, piece: PiecePlan, resources: Resources | None = None, keep_source: bool = False
+) -> PieceDem:
     """Decode one piece: its part of the run's mosaic, and on the reprojected
-    path its sub-grid resampled from that part, with its check points."""
+    path its sub-grid resampled from that part, with its check points and,
+    with `keep_source`, that part's windows."""
     res = Resources.fallback() if resources is None else resources
     mosaic = _assembled(plan, piece.mosaic)
     w = piece.window
@@ -287,7 +298,8 @@ def load_piece(plan: DemPlan, piece: PiecePlan, resources: Resources | None = No
     source = HeldWindows(plan.mosaic.meta, mosaic.tile, s.row0, s.col0)
     tile = resample(piece.grid, source, res.threads)
     checks = _checks(plan, source, res.threads, s)
-    return PieceDem(tile, w.row0, w.col0, mosaic.seams, piece.grid, checks)
+    kept = source if keep_source else None
+    return PieceDem(tile, w.row0, w.col0, mosaic.seams, piece.grid, checks, kept)
 
 
 def _assembled(plan: DemPlan, mosaic: MosaicPlan) -> Mosaic:

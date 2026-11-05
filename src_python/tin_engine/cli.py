@@ -34,7 +34,13 @@ from shapely.geometry import LineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.geometry.polygon import orient
 
-from tin_engine import cli_kit, edge_strip, final_check, installed_version, sub_catchments
+from tin_engine import (
+    cli_kit,
+    edge_strip,
+    final_check,
+    installed_version,
+    sub_catchments,
+)
 from tin_engine._core import (
     ChainRole,
     CheckPoints,
@@ -83,6 +89,7 @@ from tin_engine.crs import (
 )
 from tin_engine.decompose import DEFAULT_PIECE_BUDGET, Partition, bytes_per_node, partition
 from tin_engine.decompose import lines as cut_lines
+from tin_engine.dem_heights import DEFAULT_CLASS_M, half_count, height_shares
 from tin_engine.dem_input import (
     CachedSource,
     DemPlan,
@@ -139,6 +146,7 @@ from tin_engine.io.geopackage_write import (
     write_cells,
     write_classes,
     write_fractions,
+    write_heights,
     write_land_cover,
     write_lines,
     write_run,
@@ -150,6 +158,7 @@ from tin_engine.io.models import (
     UNITS,
     ClassFractions,
     DemTile,
+    HeightTable,
     IndexWindow,
     RasterMeta,
     ZSpelling,
@@ -218,7 +227,7 @@ from tin_engine.sources import (
     user_source_file,
 )
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
-from tin_engine.target_grid import Block, TargetGrid
+from tin_engine.target_grid import Block, SourceWindows, TargetGrid, TileWindows
 from tin_engine.tolerance_field import ToleranceLines, ToleranceSlope, line_segments
 
 if TYPE_CHECKING:  # the cut path's types; its modules load only for a cut run
@@ -698,6 +707,18 @@ def mesh(
             "--rms",
             help="Also report the root-mean-square height error over the DEM nodes "
             "inside the mesh; one more pass over the mesh. Always on with --triangles.",
+        ),
+    ] = False,
+    dem_heights: Annotated[
+        bool,
+        typer.Option(
+            "--dem-heights",
+            help="Write, per triangle, the share of its area at each height about its own "
+            "plane, in classes as wide as the DEM's published relative vertical accuracy (1 m "
+            "when its source states none), centred on 0; each triangle carries the classes its "
+            "own DEM nodes reach (dem_height_shares, dem_height_offsets, dem_height_first; the "
+            "edges in dem_height_edges_m), and the share over NoData (dem_nodata_share), from "
+            "the DEM's own pixels. Needs --tolerance or --triangles.",
         ),
     ] = False,
     tolerance_near: Annotated[
@@ -1219,6 +1240,7 @@ def mesh(
     Path(f"{cli_kit.destination(out)}.pieces", "index.json").unlink(missing_ok=True)
     paths, cached, entry = _dem_sources(dem, cache_root(cache, os.environ), known)
     caller = _z_unit(z_unit) or (entry.z_unit if entry else None)
+    class_m, class_from = _height_width(entry, dem_heights, tolerance, window is not None)
     given = None
     if domain is not None:
         with clock.phase("domain read"):
@@ -1276,13 +1298,14 @@ def mesh(
                     check_canvas(p.mosaic, res.memory_budget)
                 planned.repository.check(planned.mosaic)
             held: Once[DemTile] | RasterMeta = meta
-            checks, opened_seams = None, None
+            checks, opened_seams, held_source = None, None, None
         else:
             with clock.phase("decode"), _dem_refusals(paths):
-                opened = assemble_dem(planned, res)
+                opened = assemble_dem(planned, res, keep_source=dem_heights)
             # What is read later comes out of `opened`, which then goes, so the
             # tile's one reference is the holder `_dem_mesh` empties.
             checks, opened_seams, held = opened.checks, opened.seams, Once(opened.tile)
+            held_source = opened.source
             del opened
     except NotCached as exc:  # an outline past the domain's box needs the window's blocks
         hint = _bbox_fetch(dem[0], exc, cache) if simplify_domain or catchments else ""
@@ -1369,6 +1392,7 @@ def mesh(
             window,
             budget if domain is not None else None,
             rms,
+            (class_m if dem_heights else None, held_source),
         )
     except RunError as exc:
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
@@ -1389,6 +1413,8 @@ def mesh(
         "dem_source": source,
         "dem_vertical_unit": _z_words(meta, z_unit, caller),
     }
+    if dem_heights:
+        values |= {"dem_height_class_m": class_m, "dem_height_class_from": class_from}
     if meta.file_crs is not None:  # a DEM in feet, read as its metre twin
         feet = BY_NAME[cast(ZUnit, parse_crs(meta.file_crs).axis_info[0].unit_name)][3]
         values["dem_file_crs"] = (
@@ -1485,7 +1511,7 @@ def mesh(
 
         def load(window: IndexWindow) -> PieceDem:
             with clock.phase("decode"), _dem_refusals(paths):
-                return load_piece(planned, plans[window], res)
+                return load_piece(planned, plans[window], res, keep_source=dem_heights)
 
         try:
             done = dem_run.cut(load, write)
@@ -1543,7 +1569,7 @@ def mesh(
         with clock.phase("write: geopackage"):
             _write_geopackage(
                 surface, surface_mesh, codes, palette, cover, record, vocabulary, table, categories,
-                regulated, catchment_ids, marks,
+                regulated, catchment_ids, marks, dem_run.heights,
             )  # fmt: skip
         typer.echo(f"{surface}")
     elif out.suffix == ".vtk":
@@ -1560,6 +1586,7 @@ def mesh(
                 land_cover_codes=codes_text,
                 class_fractions=table,
                 triangle_filled=marks,
+                dem_heights=dem_run.heights,
             )
         ]
     else:
@@ -1568,10 +1595,15 @@ def mesh(
                 vertices,
                 faces=surface_mesh.triangles,
                 ascii=not binary,
-                comments=[*comments, *([f"land_cover_codes {codes_text}"] if codes_text else [])],
+                comments=[
+                    *comments,
+                    *([f"land_cover_codes {codes_text}"] if codes_text else []),
+                    *_edges_comment(dem_run.heights),
+                ],
                 face_codes=codes,
                 face_fractions=table,
                 face_filled=marks if marks is not None and marks.any() else None,
+                face_heights=dem_run.heights,
             ),
             lambda: write_ply(
                 vertices,
@@ -1610,6 +1642,7 @@ def _write_geopackage(
     regulated: npt.NDArray[np.float64] | None = None,
     catchment_ids: npt.NDArray[np.int64] | None = None,
     marks: npt.NDArray[np.bool_] | None = None,
+    heights: HeightTable | None = None,
 ) -> None:
     """``target`` as a GeoPackage, written as ``<target>.part``
     and renamed onto it: an existing file is replaced, never appended to, and
@@ -1617,7 +1650,7 @@ def _write_geopackage(
     their long-form table, and with ``categories`` the ``cells`` layer, its lake
     share split by ``regulated``, each triangle's share under reservoirs, and
     each cell's ``catchment_ids`` (1 when None); ``marks`` the triangles
-    whose class was filled."""
+    whose class was filled; ``heights`` the DEM height shares."""
     srs = srs_entry(next((e.value for e in record.entries if e.name == "crs"), None))
     part = target.with_name(target.name + ".part")
     part.unlink(missing_ok=True)  # a stale .part would be appended to, not replaced
@@ -1627,6 +1660,8 @@ def _write_geopackage(
         write_triangles(
             conn, mesh.vertices, mesh.triangles, codes, palette, srs.srs_id, filled=marks
         )
+        if heights is not None:
+            write_heights(conn, heights)
         if len(mesh.edges):
             write_lines(conn, mesh.vertices, mesh.edges, mesh.edge_masks, vocabulary, srs.srs_id)
         if codes is not None:
@@ -2741,14 +2776,17 @@ def _write_piece(
                 made.vertices, triangles=made.triangles, edges=made.edges,
                 edge_masks=made.edge_masks, vocabulary=_piece_vocabulary(vocabulary),
                 fields=file_fields(told), binary=binary, triangle_codes=codes,
-                land_cover_codes=codes_text, triangle_filled=marks,
+                land_cover_codes=codes_text, triangle_filled=marks, dem_heights=piece.heights,
             )  # fmt: skip
         else:
             coded_text = [f"land_cover_codes {codes_text}"] if codes_text else []
             data = write_ply(
                 made.vertices, faces=made.triangles, ascii=not binary,
-                comments=[*field_comments(file_fields(told)), *coded_text], face_codes=codes,
-                face_filled=marks if marks is not None and marks.any() else None,
+                comments=[
+                    *field_comments(file_fields(told)), *coded_text, *_edges_comment(piece.heights)
+                ],
+                face_codes=codes, face_filled=marks if marks is not None and marks.any() else None,
+                face_heights=piece.heights,
             )  # fmt: skip
         file = "-".join(map(str, piece.id)) + suffix
         digest = hashlib.sha256(data).hexdigest()
@@ -2757,6 +2795,13 @@ def _write_piece(
         triangles=len(made.triangles), vertices=len(made.vertices), on_frozen=piece.on_frozen
     )
     return PieceEntry(id=piece.id, file=file, sha256=digest, window=piece.window, counts=counts)
+
+
+def _edges_comment(heights: HeightTable | None) -> list[str]:
+    """The ``.ply`` comment stating the DEM height classes' edges, if any."""
+    if heights is None:
+        return []
+    return [" ".join(["dem_height_edges_m", *map(repr, heights.edges_m.tolist())])]
 
 
 def _land_cover(
@@ -3399,6 +3444,7 @@ class _DemMesh:
     values: Mapping[str, Value]
     feature_counts: tuple[int, int] | None = None
     cut: RunCut | None = None
+    heights: HeightTable | None = None
 
 
 #: A cut run's `_DemMesh.trimmed`: its meshes are its pieces'.
@@ -3441,6 +3487,7 @@ def _dem_mesh(
     budget: Window | None = None,
     piece_budget: int | None = None,
     rms: bool = False,
+    heights: tuple[float | None, SourceWindows | None] = (None, None),
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``held``'s tile
     (with ``cut``, ``held`` is the window's grid alone, and the cut run is
@@ -3460,6 +3507,8 @@ def _dem_mesh(
     lines too, and the run is cut into pieces. With ``budget`` the tolerance
     is searched for (``_budget_refined``, which checks ``piece_budget``).
     With ``rms``, or a budget, the error summary of the mesh is measured.
+    With a class width in ``heights``, the mesh's DEM height shares are
+    measured, on its source windows when given (the reprojected path).
     Returns the mesh, the record entries it knows, and the ``--stats`` sizes;
     ``clock`` gets the phases.
     ``dem`` names the source in messages. Every refusal is a usage error in the
@@ -3513,6 +3562,7 @@ def _dem_mesh(
     with clock.phase("start mesh: constraint edges"):
         edges, masks = _constraint_arrays(run.mesh, run.noded)
     refined = tolerance is not None
+    heights_made = None
     if tolerance is None:
         mesh_xy = np.asarray(run.mesh.vertices)
         assert tile is not None  # only a cut run comes without its tile
@@ -3528,7 +3578,11 @@ def _dem_mesh(
                 valid=valid,
             )
     else:
-        how = How(dem, tolerance, min_angle, feet, grid, checks, budget, rms and budget is None)
+        class_m, source = heights
+        how = How(
+            dem, tolerance, min_angle, feet, grid, checks, budget, rms and budget is None,
+            class_m is not None, class_m or 1.0, source,
+        )  # fmt: skip
         refine_with = functools.partial(_refined, tuning=_Tuning(gain, lines, steep, threads))
         if cut is not None:
             from tin_engine.basin_run import cut_run
@@ -3555,7 +3609,7 @@ def _dem_mesh(
             once = Once(tile)
             del tile  # `_refined` drops the last reference before the final check
             made = refine_with(once, run.mesh, edges, masks, how, clock)
-        trimmed = made.trimmed
+        trimmed, heights_made = made.trimmed, cast(HeightTable | None, made.heights)
         values |= made.values
     if len(trimmed.triangles) == 0:
         raise typer.BadParameter(
@@ -3571,6 +3625,7 @@ def _dem_mesh(
         start_triangles=len(run.mesh.triangles) if refined else None,
         values=values,
         feature_counts=feature_counts,
+        heights=heights_made,
     )
 
 
@@ -3615,9 +3670,8 @@ def _budget_refined(
                     f"on pieces yet: use --tolerance {t} with --domain, or raise --piece-budget",
                     param_hint="--triangles",
                 )
-        made = refine_with(
-            Once(tile), start, edges, masks, replace(how, tolerance=tolerance), clock
-        )
+        trial_how = replace(how, tolerance=tolerance, dem_heights=False)
+        made = refine_with(Once(tile), start, edges, masks, trial_how, clock)
         count = len(made.trimmed.triangles)
         if count <= window.cap and (kept is None or count > len(kept.trimmed.triangles)):
             kept = made
@@ -3651,7 +3705,13 @@ def _budget_refined(
             "budget_window_missed": "yes" if found.missed else None,
         }
     )
-    return replace(kept, values=values)
+    table = None
+    if how.dem_heights:
+        own = TileWindows(tile) if how.source is None else None
+        tau = found.chosen.tolerance
+        table, more = _height_table(how, own, tile.meta.crs, kept.trimmed, tau, threads, clock)
+        values |= more
+    return replace(kept, values=values, heights=table)
 
 
 def _refined(
@@ -3674,6 +3734,8 @@ def _refined(
     tile = held.take()
     meta = tile.meta
     tolerance, feet, threads = how.tolerance, how.feet, tuning.threads
+    # The tile itself is measured for the height shares when no source is held.
+    own = TileWindows(tile) if how.dem_heights and how.source is None else None
     values: dict[str, Value] = {}
     field = None
     if tuning.lines is not None:
@@ -3798,7 +3860,63 @@ def _refined(
             ),
             "max_error_slope_share_of_tolerance": share,
         }
-    return Refined(out, final, z, trimmed, values, final.on_frozen)
+    table = None
+    if how.dem_heights:
+        table, more = _height_table(how, own, meta.crs, trimmed, tolerance, threads, clock)
+        values |= more
+    return Refined(out, final, z, trimmed, values, final.on_frozen, table)
+
+
+def _height_width(
+    entry: RemoteSource | None, on: bool, tolerance: float | None, budget: bool
+) -> tuple[float, str]:
+    """The DEM height classes' width and where it comes from: the source's
+    relative vertical accuracy, else the default. With ``on``, a run whose
+    tolerance bounds no class count is refused before any work."""
+    width = entry.relative_vertical_accuracy_m if entry is not None else None
+    said = "default: the DEM states no vertical accuracy"
+    if entry is not None and width is not None:
+        said = f"relative_vertical_accuracy_m of source {escaped_ascii(entry.id)}"
+    width = width or DEFAULT_CLASS_M
+    if on and tolerance is None and not budget:
+        raise typer.BadParameter(
+            "needs --tolerance or --triangles: the tolerance bounds the height classes",
+            param_hint="--dem-heights",
+        )
+    if on and tolerance is not None:
+        _height_half(tolerance, width)
+    return width, said
+
+
+def _height_half(tolerance: float, width: float) -> int:
+    """The classes on either side of 0, or the refusal naming --tolerance."""
+    try:
+        return half_count(tolerance, width)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--tolerance") from exc
+
+
+def _height_table(
+    how: How,
+    own: SourceWindows | None,
+    crs: str,
+    trimmed: Trimmed,
+    tolerance: float,
+    threads: int,
+    clock: PhaseClock,
+) -> tuple[HeightTable, dict[str, Value]]:
+    """The DEM height shares of ``trimmed`` (in ``crs``), on ``how.source``
+    when it is held, else on the refined tile's windows ``own``, and the
+    record's count of triangles without data."""
+    _height_half(tolerance, how.dem_class_m)
+    windows, mesh_crs = (own, None) if how.source is None else (how.source, crs)
+    assert windows is not None, "the height shares need the tile or the source"
+    with clock.phase("dem heights"):
+        table, without = height_shares(
+            windows, np.asarray(trimmed.vertices), np.asarray(trimmed.triangles),
+            tolerance_m=tolerance, class_m=how.dem_class_m, mesh_crs=mesh_crs, threads=threads,
+        )  # fmt: skip
+    return table, {"dem_height_triangles_without_data": without}
 
 
 def _refine_phases(clock: PhaseClock, seconds: float, out: RefineOutcome) -> None:

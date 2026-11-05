@@ -38,6 +38,7 @@
 #include <limits>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -165,14 +166,14 @@ struct Accumulator {
     }
 };
 
-// One triangle's pieces into `acc`: rows, then strips, then columns.
-inline void overlap_one(const std::array<Point2, 3>& tri,
-                        const raster::RasterView<std::uint8_t>& classes,
-                        std::span<const double> row_area, Accumulator& acc) {
+// Every pixel piece of one triangle, rows, then strips, then columns:
+// visit(r, c, piece) with piece the clipped polygon, of at least three
+// vertices, or nullptr for a whole pixel inside the triangle (area 1).
+template <class Visit>
+void for_each_piece(const std::array<Point2, 3>& tri, std::size_t rows, std::size_t cols, Visit&& visit) {
     const double y_lo = std::min({tri[0].y, tri[1].y, tri[2].y});
     const double y_hi = std::max({tri[0].y, tri[1].y, tri[2].y});
     // Clamped to the grid: a crossing's rounding may put x_hi an ulp past cols.
-    const std::size_t rows = classes.geometry().rows(), cols = classes.geometry().cols();
     const auto r_begin = static_cast<std::size_t>(std::max(0.0, std::floor(y_lo)));
     const auto r_end = std::min(rows, static_cast<std::size_t>(std::max(0.0, std::ceil(y_hi))));
     Polygon whole;
@@ -217,19 +218,55 @@ inline void overlap_one(const std::array<Point2, 3>& tri,
         }
         const auto c_begin = static_cast<std::size_t>(std::max(0.0, std::floor(x_lo)));
         const auto c_end = std::min(cols, static_cast<std::size_t>(std::max(0.0, std::ceil(x_hi))));
-        const std::span<const std::uint8_t> row = classes.row(r);
-        const double weight = row_area[r];
         for (std::size_t c = c_begin; c < c_end; ++c) {
-            double piece = 1.0;
-            if (c < full_begin || c >= full_end) {
-                const auto fc = static_cast<double>(c);
-                const Polygon cell = clip(clip(strip, tri, false, fc, false), tri, false, fc + 1.0, true);
-                piece = cell.n < 3 ? 0.0 : area_local(cell);
+            if (c >= full_begin && c < full_end) {
+                visit(r, c, static_cast<const Polygon*>(nullptr));
+                continue;
             }
-            if (piece > 0.0)
-                acc.add(row[c], piece * weight);
+            const auto fc = static_cast<double>(c);
+            const Polygon cell = clip(clip(strip, tri, false, fc, false), tri, false, fc + 1.0, true);
+            if (cell.n >= 3)
+                visit(r, c, &cell);
         }
     }
+}
+
+// The area of a piece for_each_piece hands over, in index units.
+[[nodiscard]] inline double piece_area(const Polygon* piece) noexcept {
+    return piece == nullptr ? 1.0 : area_local(*piece);
+}
+
+// The refusals shared by every overlap walk, all before any work, named by
+// `who`: corners not three per triangle, a non-finite corner, a zero-area
+// triangle (std::invalid_argument), a corner past the closed window
+// [0, cols] x [0, rows] (OutsideWindow).
+inline void check_corners(std::span<const Point2> corners, std::size_t rows, std::size_t cols, const char* who) {
+    const auto fail = [who](const char* what) { return std::string(who) + ": " + what; };
+    if (corners.size() % 3 != 0)
+        throw std::invalid_argument(fail("corners must hold three points per triangle"));
+    for (std::size_t t = 0; t < corners.size() / 3; ++t) {
+        const Point2 a = corners[3 * t], b = corners[3 * t + 1], c = corners[3 * t + 2];
+        for (const Point2& p : {a, b, c}) {
+            if (!std::isfinite(p.x) || !std::isfinite(p.y))
+                throw std::invalid_argument(fail("a triangle corner is not finite"));
+            if (p.x < 0.0 || p.y < 0.0 || p.x > static_cast<double>(cols) || p.y > static_cast<double>(rows))
+                throw OutsideWindow(fail("a triangle corner lies outside the window"));
+        }
+        if (cross(b - a, c - a) == 0.0)
+            throw std::invalid_argument(fail("a triangle has zero area"));
+    }
+}
+
+// The canonical order of triangle t's corners: counter-clockwise, starting at
+// the lexicographically smallest, so the input's vertex order changes nothing.
+[[nodiscard]] inline std::array<std::size_t, 3> canonical_order(std::span<const Point2> corners, std::size_t t) {
+    std::array<std::size_t, 3> at{3 * t, 3 * t + 1, 3 * t + 2};
+    const auto p = [&](std::size_t i) { return corners[at[i]]; };
+    if (cross(p(1) - p(0), p(2) - p(0)) < 0.0)
+        std::swap(at[1], at[2]);
+    while (lex_less(p(1), p(0)) || lex_less(p(2), p(0)))
+        std::rotate(at.begin(), at.begin() + 1, at.end());
+    return at;
 }
 
 }  // namespace detail
@@ -246,22 +283,10 @@ inline void overlap_one(const std::array<Point2, 3>& tri,
                                             std::span<const double> row_area,
                                             unsigned threads = 0) {
     const std::size_t rows = classes.geometry().rows(), cols = classes.geometry().cols();
-    if (corners.size() % 3 != 0)
-        throw std::invalid_argument("class_areas: corners must hold three points per triangle");
     if (row_area.size() != rows)
         throw std::invalid_argument("class_areas: row_area must hold one cell area per row");
+    detail::check_corners(corners, rows, cols, "class_areas");
     const std::size_t n = corners.size() / 3;
-    for (std::size_t t = 0; t < n; ++t) {
-        const Point2 a = corners[3 * t], b = corners[3 * t + 1], c = corners[3 * t + 2];
-        for (const Point2& p : {a, b, c}) {
-            if (!std::isfinite(p.x) || !std::isfinite(p.y))
-                throw std::invalid_argument("class_areas: a triangle corner is not finite");
-            if (p.x < 0.0 || p.y < 0.0 || p.x > static_cast<double>(cols) || p.y > static_cast<double>(rows))
-                throw OutsideWindow("class_areas: a triangle corner lies outside the class window");
-        }
-        if (cross(b - a, c - a) == 0.0)
-            throw std::invalid_argument("class_areas: a triangle has zero area");
-    }
 
     std::vector<std::uint32_t> counts(n);
     struct Entry {
@@ -277,13 +302,13 @@ inline void overlap_one(const std::array<Point2, 3>& tri,
         detail::Accumulator acc;
         std::vector<Entry>& out = per_block[begin / block];
         for (std::size_t t = begin; t < end; ++t) {
-            // The canonical rotation: start at the smallest corner, counter-clockwise.
-            std::array<Point2, 3> tri{corners[3 * t], corners[3 * t + 1], corners[3 * t + 2]};
-            if (cross(tri[1] - tri[0], tri[2] - tri[0]) < 0.0)
-                std::swap(tri[1], tri[2]);
-            while (detail::lex_less(tri[1], tri[0]) || detail::lex_less(tri[2], tri[0]))
-                std::rotate(tri.begin(), tri.begin() + 1, tri.end());
-            detail::overlap_one(tri, classes, row_area, acc);
+            const auto at = detail::canonical_order(corners, t);
+            const std::array<Point2, 3> tri{corners[at[0]], corners[at[1]], corners[at[2]]};
+            detail::for_each_piece(tri, rows, cols, [&](std::size_t r, std::size_t c, const detail::Polygon* piece) {
+                const double area = detail::piece_area(piece);
+                if (area > 0.0)
+                    acc.add(classes.row(r)[c], area * row_area[r]);
+            });
             std::sort(acc.touched.begin(), acc.touched.end());
             counts[t] = static_cast<std::uint32_t>(acc.touched.size());
             for (const std::uint8_t k : acc.touched) {

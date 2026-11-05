@@ -292,6 +292,18 @@ class TestT7EveryCoreCallGetsTheCount:
         assert areas.threads() and set(areas.threads()) == {3}
         assert len(run.vtk.polygons) > 0
 
+    def test_dem_height_shares(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`docs/increments/137-dem-stats.md`, 3.4: the binding takes `threads`."""
+        import tin_engine.dem_heights as dem_heights
+        from test_cli_mesh_dem_heights import write_steps
+
+        shares = Calls(monkeypatch, dem_heights._core, "dem_height_shares")
+        out = tmp_path / "x.vtk"
+        args = ("--dem", str(write_steps(tmp_path)), "--stride", "10", "--tolerance", "10")
+        mesh(*args, "--dem-heights", "--threads", "3", "--out", str(out))
+        assert shares.threads() and set(shares.threads()) == {3}
+        written(out)
+
 
 # ---------------------------------------------------------------- T8
 

@@ -17,7 +17,7 @@ from tin_engine._core import CheckPoints, RasterView, RefineOutcome, error_summa
 from tin_engine.budget import Window
 from tin_engine.elevation import Trimmed
 from tin_engine.run_record import Value
-from tin_engine.target_grid import Block, TargetGrid
+from tin_engine.target_grid import Block, SourceWindows, TargetGrid
 
 
 class RunError(ValueError):
@@ -44,7 +44,9 @@ class How:
     check against a resampled grid; ``checks`` as blocks are filed into a
     store by the refine that takes them). With ``budget``, ``tolerance`` is
     set per trial by the search for the window's count. With ``rms``, the
-    refined mesh's error summary is measured."""
+    refined mesh's error summary is measured. With ``dem_heights``, the
+    trimmed mesh's DEM height shares are measured in classes ``dem_class_m``
+    wide, on ``source`` (the source DEM, reprojected) or on the tile."""
 
     dem: str
     tolerance: float
@@ -54,6 +56,9 @@ class How:
     checks: Iterable[Block] | CheckPoints | None
     budget: Window | None = None
     rms: bool = False
+    dem_heights: bool = False
+    dem_class_m: float = 1.0
+    source: SourceWindows | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +69,9 @@ class Refined:
     trimmed: Trimmed
     values: Mapping[str, Value]  # the run record's entries
     on_frozen: int
+    # With `How.dem_heights`, the trimmed mesh's `io.models.HeightTable`; typed
+    # loosely so this module stays below the codecs' models.
+    heights: object = None
 
 
 def error_values(

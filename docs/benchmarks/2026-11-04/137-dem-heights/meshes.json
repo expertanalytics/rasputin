@@ -1,0 +1,53 @@
+{
+ "tile-base-off": "1e6aa50604353e41",
+ "tile-head-off": "1e6aa50604353e41",
+ "tile-head-on": "0d3cb50fa222a024",
+ "cut4-base-off": "26115f69cc67e42d",
+ "cut4-head-off": "26115f69cc67e42d",
+ "cut4-head-on": "8509fb4a13b87186",
+ "velhas-base-off": "3f4662d475cc3a5e",
+ "velhas-head-off": "3f4662d475cc3a5e",
+ "velhas-head-on": "34c1b131dcede19a",
+ "tile/tile-head-off.vtk": {
+  "triangles": 69571,
+  "same_mesh": true,
+  "mean_classes": 3.7861609003751564,
+  "bytes_off": 2643736,
+  "bytes_on": 4534275
+ },
+ "cut4/0-0-0.vtk": {
+  "triangles": 266,
+  "same_mesh": true,
+  "mean_classes": 1.0,
+  "bytes_off": 13282,
+  "bytes_on": 18367
+ },
+ "cut4/0-1-0.vtk": {
+  "triangles": 3903,
+  "same_mesh": true,
+  "mean_classes": 5.737381501409172,
+  "bytes_off": 150936,
+  "bytes_on": 288550
+ },
+ "cut4/1-0-0.vtk": {
+  "triangles": 13906,
+  "same_mesh": true,
+  "mean_classes": 7.722062419099669,
+  "bytes_off": 520758,
+  "bytes_on": 1118336
+ },
+ "cut4/1-1-0.vtk": {
+  "triangles": 13162,
+  "same_mesh": true,
+  "mean_classes": 7.0805348731195865,
+  "bytes_off": 494419,
+  "bytes_on": 1026456
+ },
+ "velhas/velhas-head-off.vtk": {
+  "triangles": 969,
+  "same_mesh": true,
+  "mean_classes": 3.992776057791538,
+  "bytes_off": 37531,
+  "bytes_on": 65319
+ }
+}

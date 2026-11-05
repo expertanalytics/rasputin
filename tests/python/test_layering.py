@@ -70,7 +70,8 @@ LAYERS: tuple[dict[str, str], ...] = (
         "io.station_set": "hydrography io.geojson io.repository",
         "io.vtk_legacy": "features io.mesh_checks io.models",  # 26b: the ClassFractions table
         "fetch.http": "tin_engine",
-        "io.geotiff_write": "", "io.vtk_read": "",  # 51: in plugin_api, for plugins
+        "io.geotiff_write": "",
+        "io.vtk_read": "io.models",  # 51: in plugin_api, for plugins; 137: the HeightTable
     },
     {  # L3: the only importers of _core
         "raster": "_core io.models",
@@ -84,6 +85,8 @@ LAYERS: tuple[dict[str, str], ...] = (
         # 23c-3: what one window's refine takes and gives, cut or not
         "refine_job": "_core budget elevation run_record target_grid",
         "land_cover_fractions": "_core crs io.models io.repository",  # 26b: class_areas
+        # 137: each triangle's DEM height shares; index_space and the row areas
+        "dem_heights": "_core io.models land_cover_fractions target_grid",
         # 105c: polygons cut per triangle; the table and its helpers from above
         "polygon_fractions": "land_cover_fractions",
         "_core": "",
@@ -124,7 +127,7 @@ LAYERS: tuple[dict[str, str], ...] = (
     },
     {  # L5: flags in, files and stderr out
         "cli": "_core basin_run budget catchment catchment_batch cells chains legends cli_kit crs"
-               " dem_input domain decompose edge_strip elevation feature_input features"
+               " dem_heights dem_input domain decompose edge_strip elevation feature_input features"
                " fetch.features fetch.http fetch.nve fetch.plan fetch.run final_check gauge"
                " geodesy gml_import grid_domain hydrography io.cog io.domain_file io.geojson"
                " io.geopackage_write io.mesh_index io.models io.network_file io.ply io.repository"

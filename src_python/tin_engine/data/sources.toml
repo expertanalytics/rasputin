@@ -24,6 +24,9 @@ cite = [
 ]
 # Quoted from the abstract of Laipelt et al. (2024), cited above.
 description = "A digital terrain model for South America, made by removing vegetation bias in the Copernicus DEM GLO-30 \"using machine learning, Global Ecosystem Dynamics Investigation (GEDI) elevation data, and multispectral remote sensing products\"."
+# ANADEM publishes absolute figures only; the relative accuracy taken is that
+# of the GLO-30 it is made from (see the glo30 entry), 2 / 1.645.
+relative_vertical_accuracy_m = 1.216
 
 [source.glo30]
 kind = "cog-tiles"
@@ -43,6 +46,10 @@ credit = "produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) A
 # Quoted from the readme of the bucket (copernicus-dem-30m.s3.amazonaws.com/readme.html).
 description = "\"The Copernicus DEM is a Digital Surface Model (DSM) which represents the surface of the Earth including buildings, infrastructure and vegetation.\" \"GLO-30 Public provides limited worldwide coverage at 30 meters\"; 1 arc-second cells."
 licence_note = 'Licence for Copernicus DEM instance COP-DEM-GLO-30-F; Art. 6(c): "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30"'
+# Relative vertical accuracy "< 2 m LE90 for slopes <= 20 %", point to point
+# (Copernicus DEM Product Handbook v5.0, 2022, sections 2.1-2.2), as one
+# standard deviation for normal errors: 2 / 1.645. The gentle-slope figure.
+relative_vertical_accuracy_m = 1.216
 
 [source.mapbiomas-c11]
 kind = "one-cog-per-year"
