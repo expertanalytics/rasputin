@@ -152,6 +152,18 @@ class TestRefusals:
             vtk_read.read_mesh(data[:cut])
 
 
+class TestTolerance:
+    """`MeshArrays.tolerance_m`: the `tolerance_m` dataset string as a float in
+    metres, None in a mesh written before the string existed."""
+
+    def test_the_tolerance_string_comes_back_as_metres(self, vtk_read: ModuleType) -> None:
+        mesh = vtk_read.read_mesh(mesh_bytes(fields=(("crs", CRS), ("tolerance_m", "2.5"))))
+        assert mesh.tolerance_m == 2.5
+
+    def test_a_mesh_without_it_reads_none(self, vtk_read: ModuleType) -> None:
+        assert vtk_read.read_mesh(mesh_bytes()).tolerance_m is None
+
+
 class TestLandCoverCodes:
     def test_codes_and_their_string_come_back_with_lines(
         self, vtk_read: ModuleType, coded: bytes
