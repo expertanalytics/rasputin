@@ -1,5 +1,10 @@
 # h40 — Detached runs: heavy model runs survive the agent
 
+Status: **merged** (public PR #423, merge commit `3c571a8e`, 2026-11-02): full
+lane, red `e499476d`, green `dc8b2af5`, `@reviewer` approved head `020cb607`;
+219 net counted lines by `tools/count_loc.py` over the merge (the PR's 260 was
+an earlier count). No C++, mesh or refine code, so no `@perf` run.
+
 A heavy perf or land-surface-model (lsm) run goes out as a **detached job** —
 a process in its own session, writing artifacts to disk, that lives
 independently of the agent that launched it. The persona launches it and later
