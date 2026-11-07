@@ -124,6 +124,18 @@ def test_10_brief_pys_own_output_passes(project: Path, tmp_path: Path) -> None:
     silent(run_hook(project, agent(project, task(printed.stdout)), project))
 
 
+def test_10_a_block_carrying_the_worktrees_own_rule_passes(project: Path, tmp_path: Path) -> None:
+    home = tmp_path.resolve() / "home"
+    write_transcript(home, project, [human("Go.", "2026-10-04T06:00:00.000Z")])
+    (project / ".claude" / "briefs" / "local.md").write_text("A rule of this tree.\n")
+    printed = run_brief(project, home, "orchestrator", "--worktree", str(project),
+                        "--beside", "none")  # fmt: skip
+    assert printed.returncode == 0, printed.stderr
+    assert "A rule of this tree." in printed.stdout
+    event = agent(project, task(printed.stdout), "orchestrator")
+    silent(run_hook(project, event, project))
+
+
 # ---------------------------------------------------------------- 11, rule 5
 
 
