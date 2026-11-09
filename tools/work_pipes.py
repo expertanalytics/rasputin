@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import itertools
 import json
 import re
 import subprocess
@@ -43,6 +44,14 @@ NOTE = re.compile(r"^[^-]+-(.+)-\d{6}\.md$")
 NUMBER = re.compile(r"\d+\.\d+")  # `<pipe>.<position>`, as `numbers` gives them
 #: Chosen: the pipes Ola names most, in his order; any other follows, by name.
 PIPE_NUMBERS = {"mesh": 1, "lsm": 2, "harness": 3}
+#: Chosen: an item idle a day names what blocks it, never a free agent.
+EXPLAIN_AFTER = timedelta(days=1)
+ACTOR = {"designing": "@architect", "red": "@tester", "green": "@developer", "review": "@reviewer"}
+STATUS = re.compile(r"^\W*status\b", re.I)
+#: A Status paragraph that waits on Ola: "Ola's to approve", "waits for Ola's yes", "on Ola's yes".
+OLA_WAIT = re.compile(r"\bola's to (?:approve|rule|decide|choose)\b|\b(?:waits?|waiting|awaits?"
+                      r"|awaiting)(?: on| for)? ola\b|\bon ola's (?:yes|approval|ruling|choice)\b",
+                      re.I)  # fmt: skip
 Run = Callable[[list[str]], tuple[int, str]]
 
 
@@ -258,6 +267,54 @@ def gather(repo: Path) -> State:
                  asked)  # fmt: skip
 
 
+def waits_on_ola(text: str) -> bool:
+    """The design's Status paragraph, up to its first blank line, waits on Ola (`OLA_WAIT`)."""
+    lines = text.splitlines()[:40]
+    start = next((n for n, line in enumerate(lines) if STATUS.match(line)), len(lines))
+    para = " ".join(itertools.takewhile(str.strip, lines[start:]))
+    return bool(OLA_WAIT.search(" ".join(para.replace("*", "").split())))
+
+
+def unasked(repo: Path, state: State, run: Run = _git) -> dict[str, str]:
+    """Open item id to `<file> on <ref>`: a design waiting on Ola that no open question names.
+
+    A design names item `i` when its file stem ends in `-i` or is `i`; it is read
+    from master, every other remote's master, and the open items' branches.
+    """
+    git = ["-C", str(repo)]
+    items = {k: i for k, i in state.items.items() if i.state in (*RANK, "waiting", "queued")}
+    refs = ["master", *(f"{r}/master" for r in run([*git, "remote"])[1].split() if r != "origin")]
+    refs += sorted({i.branch for i in items.values() if i.branch})
+    asks = [r for r in questions.open_records(state.asked) if r["kind"] != "taken"]
+    found: dict[str, str] = {}
+    for ref in refs:
+        for name in run([*git, "ls-tree", "--name-only", ref, "docs/increments/"])[1].split():
+            stem = f"-{Path(name).stem}"
+            for k in (k for k in items if k not in found and stem.endswith(f"-{k}")):
+                named = re.compile(rf"\b{re.escape(k)}\b")
+                asked = any(r.get("item") == k or named.search(r["text"]) for r in asks)
+                if not asked and waits_on_ola(run([*git, "show", f"{ref}:{name}"])[1]):
+                    found[k] = f"{name} on {ref}"
+    return found
+
+
+def _unasked_lines(found: dict[str, str]) -> list[str]:
+    return [f"No question for Ola: {where} waits on him (item {k}); add one: python3 "
+            f"tools/questions.py add '<question>' --default '<default>' --item {k}"
+            for k, where in found.items()]  # fmt: skip
+
+
+def _blocker(i: Item, unasked: dict[str, str], chosen: set[str], now: datetime) -> str | None:
+    """What blocks an item idle over `EXPLAIN_AFTER`, no agent on it: Ola, an actor or a slot."""
+    if i.id in unasked:
+        return "Ola unasked"
+    if now - i.since <= EXPLAIN_AFTER:
+        return None
+    if i.state == "queued":
+        return "main session" if i.id in chosen else "pipe slot"
+    return ACTOR.get(i.state, "unexplained")
+
+
 def _open(items: dict[str, Item]) -> dict[str, Item]:
     return {k: i for k, i in items.items() if i.state != "pipe"}
 
@@ -304,7 +361,7 @@ def _cell(text: str, width: int) -> str:
     return (text if len(text) < width else text[: width - 4] + "...").ljust(width)
 
 
-WIDTHS = (6, 5, 8, 4, 30, 10, 12, 11)
+WIDTHS = (6, 5, 8, 4, 30, 10, 13, 11)
 HEADS = ("#", "", "PIPE", "PRI", "ITEM", "STEP", "WAITING ON", "SINCE")
 
 
@@ -351,13 +408,18 @@ def show_lines(repo: Path, now: datetime) -> list[str]:
     head = "; ".join([f"in flight {in_flight(_live(state))} of {len(state.pipes)}",
                       *state.notes, *unreadable])  # fmt: skip
     lines = [f"Pipes ({head})"[:120], *(w[:120] for w in state.warnings)]
+    flagged = unasked(repo, state)
+    for line in _unasked_lines(flagged):
+        lines += textwrap.wrap(line, 120, subsequent_indent="   ")
     lines.append("".join(_cell(h, w) for h, w in zip(HEADS, WIDTHS, strict=True)) + "NEXT")
     for i in rows:
         age = now - i.since
         since = f"{age.days} d" if age >= timedelta(days=1) else f"{age // timedelta(hours=1)} h"
         who = ("Ola" if i.state == "waiting" or i.id in asked
+               else "Ola unasked" if i.id in flagged
                else "Ola present" if unattended and not i.plain
-               else "its agent" if i.branch in notes else "free agent")  # fmt: skip
+               else "its agent" if i.branch in notes
+               else _blocker(i, flagged, chosen, now) or "free agent")  # fmt: skip
         nxt = (f"question {asked[i.id]} below" if i.id in asked
                else _todo(i))  # fmt: skip
         since += " stuck" if i.id in late else ""
@@ -377,14 +439,15 @@ def _md(text: str) -> str:
     return " ".join(text.split()).replace("|", "\\|")
 
 
-def _waits_on(state: State, item: Item, asked: dict[str, int], running: set[str]) -> str:
-    """What `item` really waits for: Ola's answer, a running agent, or a free writer."""
+def _waits_on(state: State, item: Item, asked: dict[str, int], running: set[str],
+              blocker: str | None) -> str:  # fmt: skip
+    """What `item` really waits for: Ola's answer, a running agent, its blocker or a free writer."""
     if item.id in asked:
         return f"Ola (question {asked[item.id]})"
     held = [r for r in state.asked if r["state"] == "held" and r.get("item") == item.id]
     if held or item.state == "waiting":
         return "Ola (a held question)" if held else "Ola"
-    return "a running agent" if item.id in running else "a free writer"
+    return "a running agent" if item.id in running else blocker or "a free writer"
 
 
 def markdown_lines(repo: Path, now: datetime) -> list[str]:
@@ -401,6 +464,8 @@ def markdown_lines(repo: Path, now: datetime) -> list[str]:
     flying = in_flight(_live(state))
     lines = [f"In flight {flying} of {len(state.pipes)}. A free writer takes next: {taken}."]
     lines += [f"> {w}" for w in state.warnings]
+    flagged, chosen = unasked(repo, state), {c.item.id for c in choices}
+    lines += [f"> {line}" for line in _unasked_lines(flagged)]
     group = {**RANK, "waiting": 4, "queued": 5}
     names = sorted({p.name for p in state.pipes} | {i.pipe for i in items.values()},
                    key=lambda name: (pri.get(name, 99), name))  # fmt: skip
@@ -415,7 +480,8 @@ def markdown_lines(repo: Path, now: datetime) -> list[str]:
         for i in rows:
             todo = _todo(i)
             cells = (nums[i.id], f"**{_md(i.id)}** {_md(i.title)}", i.state,
-                     _waits_on(state, i, asked, running), _md(todo))  # fmt: skip
+                     _waits_on(state, i, asked, running, _blocker(i, flagged, chosen, now)),
+                     _md(todo))  # fmt: skip
             lines.append("| " + " | ".join(cells) + " |")
     block = questions.list_lines(state.asked)
     numbered = [line for line in block if line[:1].isdigit()]
