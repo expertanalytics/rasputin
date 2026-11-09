@@ -37,6 +37,8 @@ import session_state  # beside this file, as the hooks import it
 
 ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE = ROOT / ".claude" / "briefs" / "common.md"
+#: Optional, under the briefed worktree (TEMPLATE is this checkout's): its text joins the block.
+LOCAL = Path(".claude") / "briefs" / "local.md"
 
 #: The write limit per persona, h6's table (docs/increments/h6-role-limits.md §3).
 #: Read-only is derived from an empty entry (§3.1a). When h6 lands, its ROLES replace this.
@@ -316,6 +318,13 @@ def _ola(quotations: Sequence[str]) -> list[str]:
     return out
 
 
+def _local(worktree: Path) -> list[str]:
+    """The worktree's own text as one body entry; none, so no blank line, when it has none."""
+    path = worktree / LOCAL
+    text = _normalise(path.read_text()) if path.is_file() else ""
+    return [text] if text else []
+
+
 class _Parser(argparse.ArgumentParser):
     def error(self, message: str) -> None:  # type: ignore[override]
         raise BriefError(message)
@@ -387,7 +396,7 @@ def _brief(argv: list[str] | None) -> str:
     quiet = [str(e["worktree"]) for e in running if e.get("timed") == "untimed"]
     body = [fixed, _concurrency(persona, worktree, args.beside, args.no_build, args.untimed,
                                 [str(e["worktree"]) for e in running], quiet),
-            f"Write limit: {limit}, and your note file.", *parts]  # fmt: skip
+            f"Write limit: {limit}, and your note file.", *_local(worktree), *parts]  # fmt: skip
     if persona == "reviewer":
         body.insert(3, REVIEW_LINE)
     if args.ola:
