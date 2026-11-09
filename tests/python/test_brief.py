@@ -1249,3 +1249,67 @@ def test_findings_other_briefs_need_no_search(repo: Path, home: Path) -> None:
 
 def test_findings_a_recent_search_lets_a_design_brief_through(repo: Path, home: Path) -> None:
     ok(repo, home, *args_for("architect", repo))
+
+
+# ---------------------------------------------------------------- the worktree's own rule
+
+LOCAL = ".claude/briefs/local.md"
+RULE = "A rule of this tree: read only what the task names, at a cost of $5."
+
+
+def without_time(output: str) -> str:
+    """The body with the note file's clock time out, so two runs compare."""
+    return re.sub(r"-\d{6}\.md", "-TIME.md", parse_block(output).body)
+
+
+def test_local_the_worktrees_file_is_in_the_block_and_the_hash_holds(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    args = run_as("reviewer", trees["A"], "none")
+    before = without_time(ok(repo, home, *args))
+    write(trees["A"], LOCAL, f"{RULE}\n\n")
+    printed = ok(repo, home, *args)
+    assert RULE in without_time(printed)
+    assert without_time(printed).replace(f"{RULE}\n", "") == before
+    block = parse_block(printed)
+    assert block.hash == expected_hash("reviewer", block.worktree, block.head, block.body)
+    brief = load_path(repo / BRIEF, "brief_local_rule")
+    assert brief.check(brief.find_blocks(printed)[0], repo) is None
+
+
+@pytest.mark.parametrize("persona", PERSONAS)
+def test_local_every_persona_carries_the_file(repo: Path, home: Path, persona: str) -> None:
+    write(repo, LOCAL, RULE)
+    assert RULE in parse_block(ok(repo, home, *args_for(persona, repo))).body
+
+
+def test_local_stands_before_the_quoted_lines_so_they_do_not_claim_it(
+    repo: Path, home: Path
+) -> None:
+    write(repo, LOCAL, RULE)
+    with_turns(repo, home, human("Go ahead.", STAMP))
+    body = parse_block(ok(repo, home, *args_for("tester", repo, "--ola", "Go ahead."))).body
+    heading = "Ola, verbatim, checked"  # the template names "Ola, verbatim" too
+    assert body.index(RULE) < body.index(f"From {INCREMENT}") < body.index(heading)
+
+
+def test_local_absent_the_block_ends_at_its_fixed_lines(repo: Path, home: Path) -> None:
+    body = parse_block(ok(repo, home, *args_for("orchestrator", repo))).body
+    assert body.splitlines()[-1].startswith("Write limit: ")
+
+
+def test_local_an_empty_file_leaves_the_block_unchanged(repo: Path, home: Path) -> None:
+    args = args_for("reviewer", repo)
+    before = without_time(ok(repo, home, *args))
+    write(repo, LOCAL, "\n  \n")
+    assert without_time(ok(repo, home, *args)) == before
+
+
+def test_local_only_the_briefed_worktree_counts(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    """The file of the checkout running brief.py, or of another tree, does not travel."""
+    write(repo, LOCAL, RULE)
+    write(trees["A"], LOCAL, RULE)
+    args = run_as("reviewer", trees["B"], "none")
+    assert RULE not in parse_block(ok(repo, home, *args)).body
