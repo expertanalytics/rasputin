@@ -715,8 +715,8 @@ def test_the_table_has_one_aligned_row_per_open_item(repo: Path) -> None:
     assert chosen == ["next: 2.1 lsm/l queued (head of its pipe)"]
     assert [row["ITEM"].split()[0] for row in rows if row["mark"] == "next"] == ["l"]
     assert {i: by_id[i]["WAITING ON"] for i in "rgwql"} == {
-        "r": "its agent", "g": "free agent", "w": "Ola", "q": "free agent", "l": "free agent"
-    }  # fmt: skip
+        "r": "its agent", "g": "free agent", "w": "Ola", "q": "free agent", "l": "main session"
+    }  # fmt: skip  # `l`, idle 26 h and chosen, waits on the main session to spawn it
     assert {i: (by_id[i]["PIPE"], by_id[i]["PRI"], by_id[i]["STEP"]) for i in "rwl"} == {
         "r": ("core", "1", "red"), "w": ("core", "1", "waiting"), "l": ("lsm", "2", "queued")
     }  # fmt: skip
@@ -774,3 +774,91 @@ def test_commands_that_take_an_id_accept_the_number(repo: Path) -> None:
     assert result.returncode != 0 and "4.9" in result.stderr
     refused = cli(repo, "add", "core", "4.1", "an id shaped like a number")
     assert refused.returncode != 0 and "4.1" in refused.stderr
+
+
+# ---------------------------------------------------------------- 10. waits on Ola, unasked
+
+
+def design(repo: Path, ref: str, name: str, status: str) -> None:
+    """Commit `docs/increments/<name>` with `status` as its Status paragraph on branch `ref`."""
+    git(repo, "checkout", "-q", "-B", ref) if ref != "master" else git(repo, "checkout", "-q", ref)
+    path = repo / "docs" / "increments" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"# {name}\n\n{status}\n\nOla, verbatim:\n")
+    git(repo, "add", str(path))
+    git(repo, "commit", "-q", "-m", f"design {name}")
+    git(repo, "checkout", "-q", "master")
+
+
+@pytest.mark.parametrize("status", [
+    "Status: designed on ff03720e.\n**The table in section 3.2 is Ola's to approve**; then build.",
+    "Status: **approved by code review round 2; waits for Ola's yes\nto push.**",
+    "**Status:** amendment built, awaiting Ola's yes to land it.",
+    "Status: **built**; next the push, on Ola's yes.",
+    "Status: drafted; waiting on Ola.",
+])  # fmt: skip
+def test_a_status_paragraph_that_waits_on_ola_is_caught(status: str) -> None:
+    assert pipes.waits_on_ola(f"# Title\n\n{status}\n\nOla, verbatim:\n")
+
+
+@pytest.mark.parametrize("status", [
+    "Status: **ruled by Ola 2026-09-27** (section 8).",
+    "Status: built and accepted; Ola's yes covers building it (section 1).",
+    "Status: built and accepted. Ola said yes to the merge on 2026-11-06.",
+    "Status: **approved**, 2026-10-29 (Ola, section 5).",
+    "Status: built.\n\nThe table in section 3.2 is Ola's to approve.",  # past the paragraph
+    "No status line.\nThe table is Ola's to approve.",
+])  # fmt: skip
+def test_a_status_paragraph_that_does_not_wait_on_ola_is_not(status: str) -> None:
+    assert not pipes.waits_on_ola(f"# Title\n\n{status}\n")
+
+
+WAITS = "Status: designed.\nThe table in section 3.2 is Ola's to approve."
+ASK_LINE = "No question for Ola: docs/increments/h21-acc.md on worktree-acc waits on him (item acc)"
+
+
+def test_a_design_waiting_on_ola_with_no_question_is_named_until_one_is_asked(repo: Path) -> None:
+    design(repo, "worktree-acc", "h21-acc.md", WAITS)
+    append(repo, rec("acc", "queued", age=7 * DAY), rec("other", "queued", age=7 * DAY))
+    lines = pipes.show_lines(repo, NOW)
+    assert any(line.startswith(ASK_LINE) for line in lines), lines
+    assert "--item acc" in " ".join(
+        lines[lines.index(next(x for x in lines if x.startswith(ASK_LINE))) :][:2]
+    )
+    rows = {row["ITEM"].split()[0]: row for row in table(lines)}
+    assert rows["acc"]["WAITING ON"] == "Ola unasked"
+    assert rows["other"]["WAITING ON"] != "Ola unasked"
+    markdown = pipes.markdown_lines(repo, NOW)
+    assert any(line.startswith("> " + ASK_LINE) for line in markdown), markdown
+    assert any("**acc**" in line and "| Ola unasked |" in line for line in markdown), markdown
+    ask_ola(repo, "Approve the table in design h21-acc, section 3.2?")
+    lines = pipes.show_lines(repo, NOW)
+    assert not any(line.startswith("No question for Ola:") for line in lines), lines
+
+
+def test_a_design_on_master_names_its_item_and_a_question_by_item_clears_it(repo: Path) -> None:
+    design(repo, "master", "30b-acc.md", "Status: **approved; waits for Ola's yes\nto push.**")
+    design(repo, "master", "31-unrelated.md", "Status: waits for Ola's yes to push.")
+    append(repo, rec("acc", "queued", age=2 * DAY))
+    lines = pipes.show_lines(repo, NOW)
+    named = [line for line in lines if line.startswith("No question for Ola:")]
+    assert len(named) == 1 and "docs/increments/30b-acc.md on master" in named[0], lines
+    ask_ola(repo, "Push it?", "acc")
+    assert not any(line.startswith("No question for Ola:") for line in pipes.show_lines(repo, NOW))
+
+
+def test_an_item_idle_over_a_day_names_what_blocks_it_never_a_free_agent(repo: Path) -> None:
+    append(repo, rec("head", "queued", age=2 * DAY), rec("behind", "queued", age=2 * DAY),
+           rec("new", "queued", pipe="lsm", age=HOUR), rec("t", "red", pipe="lsm", age=2 * DAY),
+           rec("d", "designing", pipe="lsm", age=3 * DAY))  # fmt: skip
+    rows = {row["ITEM"].split()[0]: row["WAITING ON"] for row in table(pipes.show_lines(repo, NOW))}
+    assert rows == {"head": "main session", "behind": "pipe slot", "new": "free agent",
+                    "t": "@tester", "d": "@architect"}  # fmt: skip
+    markdown = "\n".join(pipes.markdown_lines(repo, NOW))
+    assert "| main session |" in markdown and "| @tester |" in markdown
+
+
+def test_a_merged_item_is_never_named(repo: Path) -> None:
+    design(repo, "master", "h34-acc.md", "Status: built; next the push, on Ola's yes.")
+    append(repo, rec("acc", "merged", age=9 * DAY))
+    assert not any(line.startswith("No question for Ola:") for line in pipes.show_lines(repo, NOW))
