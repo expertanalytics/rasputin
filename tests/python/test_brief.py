@@ -1289,7 +1289,8 @@ def test_local_stands_before_the_quoted_lines_so_they_do_not_claim_it(
     write(repo, LOCAL, RULE)
     with_turns(repo, home, human("Go ahead.", STAMP))
     body = parse_block(ok(repo, home, *args_for("tester", repo, "--ola", "Go ahead."))).body
-    assert body.index(RULE) < body.index(f"From {INCREMENT}") < body.index("Ola, verbatim")
+    heading = "Ola, verbatim, checked"  # the template names "Ola, verbatim" too
+    assert body.index(RULE) < body.index(f"From {INCREMENT}") < body.index(heading)
 
 
 def test_local_absent_the_block_ends_at_its_fixed_lines(repo: Path, home: Path) -> None:
