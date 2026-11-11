@@ -104,8 +104,8 @@ job's own wall clock with no watchdog watching it; nothing to trip.
 
 What is *heavy* (the rule that decides detach):
 * any `@perf` timed acceptance run or scaling sweep (`bench.py run`);
-* any lsm model run (per-frame / per-triangle field output), e.g. the north-face
-  melt instrumented run (q146);
+* any lsm model run (per-frame / per-triangle field output), e.g. q146's
+  instrumented run;
 * any run a persona's own judgement expects to exceed **~3 minutes** of compute.
 
 What stays on-stream (not detached): quick checks, probes, builds, the test

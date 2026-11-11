@@ -91,8 +91,8 @@ section: two paper citations, which the new README keeps as "Publications".
 They are bibliographic facts, so nothing of hers affects the licence. (This is
 an engineering reading, not legal advice.)
 
-**A later risk, not this PR's.** The radiation design (branch
-`design-terrain-radiation`, TR1) ports `legacy/rasputin/solar_position.h`.
+**A later risk, not this PR's.** A private design (TR1) ports
+`legacy/rasputin/solar_position.h`.
 `git blame -C -C` gives that header 681 lines by Ola and 71 by Magne Nordaas.
 Magne worked for Expert Analytics (A1), so the company holds those lines and
 no permission is needed. TR1's design should still say where the solar-position algorithm itself

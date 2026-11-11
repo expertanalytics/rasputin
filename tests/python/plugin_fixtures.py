@@ -1,6 +1,6 @@
 """Installed-looking plugins for the `rasputin.commands` hook. Test support only.
 
-`docs/increments/51-open-core.md`, *9.1 Public (P1 unless marked)*.
+`docs/increments/51-plugin-seam.md`, *3.1 Public tests of the seam*.
 `write_plugin` lays out what an installed distribution leaves on ``sys.path``:
 one module and one ``<name>-<version>.dist-info`` directory holding
 ``METADATA`` and ``entry_points.txt``. Put that directory on ``sys.path`` (or

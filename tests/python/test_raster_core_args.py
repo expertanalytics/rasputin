@@ -1,7 +1,7 @@
 """`raster.core_args`: exactly what crosses into C++, checked once, for either module.
 
-`docs/increments/51-open-core.md`, *4.3 The raster across two extension
-modules* and *9.1 Public (P1 unless marked)*, T8. ``core_args`` keeps
+`docs/increments/51-plugin-seam.md`, *2.3 The raster across two extension
+modules* and *3.1 Public tests of the seam*, T8. ``core_args`` keeps
 ``to_core``'s refusals word for word, and ``to_core`` becomes
 ``raster_view(**core_args(tile))``, so the view built either way samples
 alike. ``core_args`` is looked up inside each test, so each fails on its own.

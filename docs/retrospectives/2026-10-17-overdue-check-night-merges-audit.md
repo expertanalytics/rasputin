@@ -26,8 +26,8 @@ commits failing tests; **green step**: `@developer` makes them pass.
 verdict into the increment file. **Governed file**: a file the governance
 guard asks about (rule files, hooks, `tools/`). Increment numbers: 57 vector
 datasets in the source catalogue (#275), 58 "class map" renamed "legend"
-(#277), 60 `DemInput.label` deleted (#276), 61 routing to a lake
-shore (private), 62 observed melt-out (private, parked), 63 `rasputin fetch` for
+(#277), 60 `DemInput.label` deleted (#276), 61 (private),
+62 (private, parked), 63 `rasputin fetch` for
 lakes and land cover, 64 `plugin_api` exports `accumulate` (#279), 65 the
 refined mesh is Delaunay at its written coordinates (#278), 66 no two
 vertices written at one point, h22 harness fixes (private push grants,
@@ -242,7 +242,7 @@ From `session.md`, as the personas and the main session wrote them:
 |---|---|---|---|
 | #269 | h21 PR A, rule text | 0 (prose) | Four design rounds, three sent back, then approved. Rule text by the main session at Ola's prompt. In order. |
 | #270 | 51 P1, the open-core plugin seam | +157 | Design (two rounds), red, green, test run, review (two rounds, one CI-only). In order. |
-| #271 | 51 P2, snow and radiation leave the core | −2,317 | Red (absence test), green, review. The docs commit `aa171207` is by the main session: @architect's file. |
+| #271 | 51 P2, the private package's code leaves the core | −2,317 | Red (absence test), green, review. The docs commit `aa171207` is by the main session: @architect's file. |
 | #272 | 54, the open core reads as one tool | −80 | In order. The CI fix `3cc2b848` (+6 lines in `tools/ci_changes.py`) came after the last review, with no recording commit. Small, but code after review is unreviewed. |
 | #273 | 55, local datasets in the catalogue | +242 | Two review rounds, CI fix recorded. In order. |
 | #274 | 56, `rasputin draw` deleted | −720 | Review sent it back once. In order. |
@@ -319,7 +319,7 @@ can be gated; C, D, E and H need a reviewer's eye, so P6 adds them to
 ## 4. Rule text
 
 `python3 tools/rule_sizes.py`: **11,550 words, +35** since
-`2026-10-14-merge-46.md` (`CLAUDE.md` +55 for *Conflicts before a push
+a private retrospective (`CLAUDE.md` +55 for *Conflicts before a push
 question*; `docs/increments/README.md` +19; `reviewer.md` −39). The −347
 words carried from that retrospective (its P9) are still not applied.
 

@@ -4,8 +4,8 @@
 increment 69 merged as #290), branch `worktree-mcp-hardening`. **Short
 path** (`docs/increments/README.md@aabac548:76`): about 12 counted
 lines, no C++ file, no refine or mesh code.
-Number 72 because 70 and 71 are held by designs on the worktrees
-`lsm-ddd-routing` and `lsm-route-memory`.
+Number 72 because 70 and 71 are held by designs on two private
+branches.
 
 ## 1. What changes
 

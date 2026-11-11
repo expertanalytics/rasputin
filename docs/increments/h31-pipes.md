@@ -329,7 +329,7 @@ Pipes (in flight 2 of 3; pipes read from private/master 79848102, committed 2026
 next core    1   tri-budget triangle budget    review    free agent  2 h        reviewer round 2 #351
      core    1   h31 development pipes         red       its agent   5 h        green
      core    1   fable-june Fable June data    queued    free agent  1 d        design
-     lsm     2   snow-shelter wind shelter     queued    Ola present 2 d        design
+     lsm     2   lsm-item a private item       queued    Ola present 2 d        design
 Questions for Ola:
   1. core/h30: finish the 4 governed files with you at the prompt?  default: waits
 next: core/tri-budget review (nearest to merging)

@@ -207,7 +207,7 @@ def test_c5_a_branch_name_is_allowed_on_an_act(store: Path) -> None:
         "Fetch https://a.b/c.py before the run?",
         "Report wind in m/s?",
         "Is a yes/no answer enough here?",
-        "Show radiation in W/m²?",
+        "Show the flow in m³/s?",
         "Keep the switch on/off by default?",
         "Add one line to CLAUDE.md about it?",
         "Use Large Shapes (LS) for the demo, with LS as the default?",

@@ -44,8 +44,8 @@ documentation.
   headings, and that is the shape used here (Typer's `rich_help_panel`).
 - Plugin discovery by entry points (Python Packaging User Guide, *Creating and
   discovering plugins*) and the CMake side (`cmake.root`, scikit-build-core's
-  *Search paths*) are already cited in `docs/increments/51-open-core.md`,
-  *2.1 Practice: how Python and C++ projects ship plugins*. `docs/plugins.md`
+  *Search paths*) are already cited in `docs/increments/51-plugin-seam.md`,
+  *1. Prior art*. `docs/plugins.md`
   documents that design; it changes none of it.
 
 No novelty is claimed.
@@ -151,8 +151,8 @@ Its sections, each from the code it describes:
    source, bind `TaggedRasterView<MyTag>` with `py::module_local()`, build it
    from `core_args(tile)`, and never accept `_core.RasterView`: only NumPy
    arrays and Python scalars cross between two extension modules. One
-   sentence of why, then a pointer to `docs/increments/51-open-core.md`,
-   *4.3 The raster across two extension modules*.
+   sentence of why, then a pointer to `docs/increments/51-plugin-seam.md`,
+   *2.3 The raster across two extension modules*.
 
 Every claim in it is checked by `@reviewer` by running it
 (`.claude/REQUIRED-READING.md`, *Before you publish*).
@@ -242,7 +242,7 @@ app's `help`, not the callback's (probed).
   (`refinement/refine.hpp`, `refinement/refine_points.hpp`), which any C++20
   compiler has. `CLAUDE.md`'s "`std::chrono`" stays true for that reason and
   is not changed.
-- `ROADMAP.md` row 51 and `docs/increments/51-open-core.md`'s status line: P2
+- `ROADMAP.md` row 51 and increment 51's status line: P2
   merged as #271 (`9a7c312d`); the private package's PRs are tracked in the
   private repository.
 - The cut-run groundwork (Ola's ruling, section 1): one plain sentence that it

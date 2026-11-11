@@ -56,8 +56,7 @@ section 4) set the file format and its loader; 58 renamed it "legend"; 73
 coded columns as left out (section 7 there). This increment extends 41's
 format by one optional list of tables; nothing in 41's mapping changes.
 
-*Ideas.* Overlaps, not taken up: the private package's "Evaporation per
-triangle from land-cover classes" (a consumer of these codes) and "spruce
+*Ideas.* Overlaps, not taken up: a private package idea (a consumer of these codes) and "spruce
 apart from pine" (SR16; this increment gives it AR50's coniferous areas to
 bound it, and the comparison Ola asked for belongs there). Nothing in the core
 ideas file is taken up.
