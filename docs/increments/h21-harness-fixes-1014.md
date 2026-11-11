@@ -3,7 +3,7 @@
 Status: **design**, 2026-10-14, on `worktree-harness-1014` off master
 `55b9f564`. Two PRs, by day (section 11): every production file is governed.
 Implements nine changes Ola approved on 2026-10-14 ("yes to all, push and
-enqueue"): P1 to P5 of `docs/retrospectives/2026-10-14-night-snow-46.md`
+enqueue"): P1 to P5 of a private retrospective's
 section 6; the three guard false positives that retrospective lists as
 waiting on Ola in its section 2 (the GraphQL read, the scratchpad clone, the
 after-commit hook on a conflicted merge); and P2 and P4 of
@@ -312,7 +312,7 @@ Three cases, all seen 2026-10-13 and 2026-10-14 (transcript of session
   && ...` printed `NOT CHECKED: git ran in .../rasputin_scratch/ideas`. The
   merge ran in the main checkout; the hook resolved it from the post event's
   `cwd`, which is the directory after the line's `cd` (section 1). The doubled
-  paths `.../worktrees/snow-anim/.claude/worktrees/snow-anim` in the same
+  paths `.../worktrees/<name>/.claude/worktrees/<name>` in the same
   transcript are the same fault. So a line that commits and then `cd`s gates
   the wrong tree or none.
 

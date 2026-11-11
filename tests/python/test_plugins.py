@@ -1,7 +1,7 @@
 """The `rasputin.commands` plugin hook: discovery, merging, refusals, `version`, MCP.
 
-`docs/increments/51-open-core.md`, *4.1 The plugin hook (Python)* and *9.1
-Public (P1 unless marked)*, T1 to T6. Every plugin here is a real
+`docs/increments/51-plugin-seam.md`, *2.1 The plugin hook (Python)* and
+*3.1 Public tests of the seam*, T1 to T6. Every plugin here is a real
 distribution on the path (`plugin_fixtures`), found by ``importlib.metadata``
 itself. In process, the directory goes on ``sys.path``; in a child, on
 ``PYTHONPATH``. The module under test is imported in a fixture, so each test

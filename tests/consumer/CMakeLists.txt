@@ -1,8 +1,8 @@
 # A plugin's build against the installed core, and nothing else: no path into
 # this repository's include/ or bindings/. It fails when a promised header is
 # not installed or the CMake config is wrong.
-# Spec: docs/increments/51-open-core.md, section 4.4 and the consumer-build
-# step of section 9.1.
+# Spec: docs/increments/51-plugin-seam.md, section 2.4 and the consumer-build
+# step of section 3.1.
 #
 #   cmake -S tests/consumer -B build-consumer \
 #         -Drasputin_ROOT=<the installed tin_engine directory> \

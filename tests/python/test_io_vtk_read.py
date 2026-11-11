@@ -1,6 +1,6 @@
 """Reading rasputin's own mesh back: `tin_engine.io.vtk_read.read_mesh`.
 
-`docs/increments/51-open-core.md`, *3.1 What moves to the private package*:
+`docs/increments/51-plugin-seam.md`, *3.1 Public tests of the seam*:
 the reader stays in the core, offered to plugins. `read_mesh(data:
 bytes) -> MeshArrays` reads the binary legacy VTK that `rasputin mesh` writes
 (header line `rasputin mesh`): the `crs` string from the dataset's field data,

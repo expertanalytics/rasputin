@@ -1,13 +1,11 @@
 # Increment 88: the parallel helper keeps its threads between calls
 
-**Status: dropped, not built** (Ola's ruling, 2026-10-22). The request assumed
-about 35,000 parallel calls a year from the private package's step loop; the
-year makes 4,684 (35,000 was threads started, 8 a call; section 1), so a
-persistent team would save only about 1 to 1.5 s a year. The evaluator's time
-was per-receiver trigonometry, which the private package's increment 89 (the
-sun evaluator speed-up) sped up instead. The design below is kept unchanged
-because that increment cites it. Designed by `@architect`, 2026-10-21, on
-master `3b21eb59`, branch `worktree-sun-threads`. Full path: it changes a C++
+**Status: dropped, not built** (Ola's ruling, 2026-10-22). The request overstated
+how often the private package calls the helper (the figure was threads
+started, 8 a call; section 1), so a persistent team would save only about 1
+to 1.5 s of a run. The private package sped up its own code instead (its
+increment 89). The design below is kept because that increment cites it.
+Designed by `@architect`, 2026-10-21, on master `3b21eb59`. Full path: it changes a C++
 header that refine and the mesh scan run through, so `@perf`'s acceptance run
 applies
 (`docs/increments/README.md`, *Acceptance*). Number 88 because 87 is the
@@ -24,33 +22,24 @@ relayed by the main session and are not quoted here.
 `parallel_util::for_each_block` (`include/terrain/parallel_util/chunks.hpp`)
 starts `min(threads, blocks)` new `std::jthread`s on every call above its
 inline threshold and joins them before returning. Refine calls it a few dozen
-times a run, so that never mattered. The private package's step loop calls it
-once per step and kernel: the sun-and-shadow evaluator, the snow kernel and
-the new evaporation kernel each reach it through the same header, compiled
-into their own extension module. Every caller gains from a change here
+times a run, so that never mattered. The private package calls it
+many times a run from several kernels, each reaching it through the same
+header, compiled into the private extension module. Every caller gains from a change here
 without changing its own code.
 
-**What the evidence says, and what it does not.** From the year-run profile
-(`git show ee9565d3:docs/benchmarks/2026-10-21/profile-year/README.md`, AC
-power, M1 Max):
+**What the evidence says, and what it does not.** From a profile of a
+private run (AC power, M1 Max):
 
-- macOS `sample` saw 14,241 distinct threads in 30 s of the 78 s step loop,
-  about 37,000 over the loop if the rate held.
-- The evaluator was called 4,684 times (cProfile), 3.95 ms a call. At 8
-  threads a call that is about 37,000 threads: the "about 35,000" figure the
-  request gave is threads started, not calls. Checked with
-  `git show ee9565d3:docs/benchmarks/2026-10-21/profile-year/raw/pstats-listing.txt | grep evaluate_instant`.
+- The request's figure counted threads started, 8 a call, not calls; the
+  private package makes about an eighth as many calls.
 - A start-and-join of 8 threads cost about 90 µs plus about 25 µs of join on
   this machine (`docs/benchmarks/2026-09-27/serial-profile/README.md`, lines
   229-231: 3.8 ms over 41 starts, join 1.0 ms; battery power).
 
-So, an estimate, not measured: thread starts cost the evaluator about
-4,684 × 115 µs ≈ 0.5 s of its 18.5 s, and the evaporation kernel (one call per
-step since private increment 86, 8,784 steps) about 1 s more. The pool takes
-back most of that, about 1-1.5 s of the year run. It does not make the
-evaluator fast: its time is the per-receiver trigonometry the profile lists
-(`atan2`, `tan`, `sincos`, `pow`), which is the private package's to fix. The
-micro-benchmark in section 7 replaces this estimate with a measurement.
+So, an estimate, not measured: the pool would take back about 1-1.5 s of
+a private run. It does not make the private callers fast; that is the
+private package's to fix. The micro-benchmark in section 7 replaces this
+estimate with a measurement.
 
 ## 2. Prior art: legacy and literature
 
@@ -206,7 +195,7 @@ thread start; it costs one relaxed atomic increment per start.
   call ends), sets `stop`, wakes the team and joins it, and leaves `busy` set
   for good. In a forked child it does nothing: the threads exist only in the
   parent, and joining their copies is undefined.
-- **Per shared library.** `_core` and the private package's `_lsm` are each
+- **Per shared library.** `_core` and the private package's extension are each
   built with `pybind11_add_module`, which hides symbols, so each has its own
   pool; a process using both holds two sleeping teams. Where symbols are not
   hidden (a test binary, or Linux's unique inline statics), two libraries may
@@ -245,7 +234,7 @@ rewritten in the green commit to say what the code then does.
   for. Sleeping threads cost no CPU; the largest `threads` a process asked for
   bounds the team.
 - **A Python view of `thread_starts`.** No binding change.
-- **Making the evaluator itself fast.** The private package's work (section 1).
+- **Making the private callers fast.** The private package's work (section 1).
 
 ## 6. The tests that pin it
 
@@ -307,11 +296,11 @@ waited on (P5 or P6 hangs, caught by the watchdog).
   `test_parallel_pool.cpp`: 10,000 calls of `for_each_block(55,000, 8, {}, fn)`
   with a trivial `fn` (one add per index), wall clock per call, median of 5
   runs. It uses only `for_each_block`, so `@perf` compiles the same file
-  against the merge base's header for the before figure. 55,000 is the year
+  against the merge base's header for the before figure. 55,000 is a private
   run's triangle count. Expected from section 1: before about 115 µs a call;
   after, the cost of a condition-variable wake, which this design does not
   guess. Recorded under `docs/benchmarks/<date>/`.
-- **The private year run**, timed by `@perf` before and after: section 1's
+- **A private run**, timed by `@perf` before and after: section 1's
   estimate is 1-1.5 s.
 
 ## 8. Size

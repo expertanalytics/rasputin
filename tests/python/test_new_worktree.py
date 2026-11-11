@@ -559,33 +559,45 @@ def test_the_default_run_answers_a_missing_program_with_127(repos: Repos, tmp_pa
     assert "not found" in done.stderr
 
 
-# --- 8. a private (rasputin-lsm) worktree ----------------------------------------------------
+# --- 8. a plugin checkout, marked by its layout table ----------------------------------------
 
 PIN = "rasputin @ git+https://example.invalid/rasputin@0123456789abcdef0123456789abcdef01234567"
 
+#: A plugin checkout's layout table (keys package, source, extension, target).
+LAYOUT = (
+    '[tool.rasputin.worktree]\npackage = "plugx"\nsource = "src"\n'
+    'extension = "_plugx"\ntarget = "_plugx"\n'
+)
+
 
 @dataclass
-class LsmTable(NewTable):
-    """NewTable whose import check is rasputin_lsm's: `<wt>/src`, `_lsm` from `<wt>/.venv`."""
+class PluginTable(NewTable):
+    """NewTable whose import check is plugx's: `<wt>/src`, `_plugx` from `<wt>/.venv`."""
 
     def __call__(self, argv: list[str], cwd: Path | None) -> Answer:
-        if is_venv_python(argv) and argv[1:2] == ["-c"] and "rasputin_lsm" in argv[2]:
+        if is_venv_python(argv) and argv[1:2] == ["-c"] and "import plugx" in argv[2]:
             if not self.installed:
-                return Answer(1, "", "ModuleNotFoundError: No module named 'rasputin_lsm'\n")
+                return Answer(1, "", "ModuleNotFoundError: No module named 'plugx'\n")
             wt = Path(argv[0]).parent.parent.parent.resolve()
-            so = wt / ".venv" / "lib" / "python3.14" / "site-packages" / "rasputin_lsm" / "_lsm.so"
-            src = wt / "src" / "rasputin_lsm"
+            so = wt / ".venv" / "lib" / "python3.14" / "site-packages" / "plugx" / "_plugx.so"
+            src = wt / "src" / "plugx"
             return Answer(0, f"{src / '__init__.py'}\n{src / 'cli.py'}\n{so}\n")
         return super().__call__(argv, cwd)
 
 
-def lsm_run(repos: Repos, capsys: pytest.CaptureFixture[str], extras: str) -> tuple[Path, Outcome]:
-    wt = existing_worktree(repos, "lsm", venv=False, configured=False)
+def plugin_pyproject(wt: Path, extras: str, *, table: bool = True) -> None:
     (wt / "pyproject.toml").write_text(
-        f'[project]\nname = "rasputin-lsm"\ndependencies = ["{PIN}", "numpy"]\n'
-        f'[project.optional-dependencies]\ndev = ["pytest"]\n{extras}'
+        f'[project]\nname = "plugx"\ndependencies = ["{PIN}", "numpy"]\n'
+        f'[project.optional-dependencies]\ndev = ["pytest"]\n{extras}' + (LAYOUT if table else "")
     )
-    outcome = run_tool(repos, ["--existing", str(wt)], capsys, LsmTable(repos.main))
+
+
+def plugin_run(
+    repos: Repos, capsys: pytest.CaptureFixture[str], extras: str
+) -> tuple[Path, Outcome]:
+    wt = existing_worktree(repos, "plug", venv=False, configured=False)
+    plugin_pyproject(wt, extras)
+    outcome = run_tool(repos, ["--existing", str(wt)], capsys, PluginTable(repos.main))
     assert outcome.code == 0, outcome.text
     assert kinds(outcome.recorder) == ["venv", "install", "configure"]
     return wt, outcome
@@ -598,17 +610,30 @@ def lsm_run(repos: Repos, capsys: pytest.CaptureFixture[str], extras: str) -> tu
         ('codecs = ["imagecodecs>=2024.1"]\n', ".[dev,codecs]", PIN),
     ],
 )
-def test_a_private_worktree_installs_the_pinned_core_with_codecs_before_configuring_against_it(
+def test_a_plugin_checkout_gets_its_layout_and_the_pinned_core_before_configuring(
     repos: Repos, capsys: pytest.CaptureFixture[str], extras: str, editable: str, core: str
 ) -> None:
-    wt, outcome = lsm_run(repos, capsys, extras)
+    wt, outcome = plugin_run(repos, capsys, extras)
     by_kind = {kind(c.argv): c.argv for c in outcome.recorder.calls}
     assert option(by_kind["install"], "-e") == editable
     assert core in by_kind["install"] and "pybind11" in by_kind["install"]
     root = defines(by_kind["configure"])["rasputin_ROOT"]
     assert same(root, wt / ".venv" / "lib" / "python3.14" / "site-packages" / "tin_engine")
-    assert f"rasputin_lsm and rasputin_lsm.cli from {wt}/src" in outcome.out
-    assert "--target _lsm" in outcome.out
+    assert f"plugx and plugx.cli from {wt}/src" in outcome.out
+    assert "--target _plugx" in outcome.out
+
+
+def test_a_checkout_without_the_table_gets_the_core_layout_whatever_its_name(
+    repos: Repos, capsys: pytest.CaptureFixture[str]
+) -> None:
+    wt = existing_worktree(repos, "plug", venv=False, configured=False)
+    plugin_pyproject(wt, "", table=False)
+    outcome = run_tool(repos, ["--existing", str(wt)], capsys)
+    assert outcome.code == 0, outcome.text
+    by_kind = {kind(c.argv): c.argv for c in outcome.recorder.calls}
+    assert option(by_kind["install"], "-e") == ".[dev,codecs]"
+    assert "rasputin_ROOT" not in defines(by_kind["configure"])
+    assert f"tin_engine and tin_engine.cli from {wt}/src_python" in outcome.out
 
 
 def test_a_public_worktree_is_not_pointed_at_an_installed_core(

@@ -1,7 +1,7 @@
 """`tin_engine.plugin_api`: the names a plugin may import, each the core's own object.
 
-`docs/increments/51-open-core.md`, *4.2 The Python API a plugin may import
-(`tin_engine.plugin_api`)* and *9.1 Public (P1 unless marked)*, T7. The list
+`docs/increments/51-plugin-seam.md`, *2.2 The Python API a plugin may import
+(`tin_engine.plugin_api`)* and *3.1 Public tests of the seam*, T7. The list
 is the design's table, written out here: a name added to or dropped from
 ``__all__`` is a visible edit of this file. Identity, not equality: a
 re-export that wrapped or copied an object would let the two drift apart.

@@ -129,8 +129,8 @@ Each case was checked against the code at `ed0d313d`:
   file is refused, as today for any unknown key, naming the file and the key.
 - **Old key in a plugin's `sources.toml`**: that plugin's file is skipped as
   one `refused` line (`catalogue`, unchanged); the core runs. No plugin in
-  Ola's repositories uses the key (`git grep` in `rasputin-radiation`, the
-  one plugin checked out beside this repository: no hit).
+  Ola's repositories uses the key (`git grep` in another of Ola's repositories,
+  the one checked out beside this repository: no hit).
 - **Old MCP argument** (`features_map`): not in the tool's schema, whose
   argument model is `extra="forbid"` (`mcp/schema.py`, line 153); refused.
 - **Mesh files written before**: the run record's field *names* do not change

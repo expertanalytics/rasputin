@@ -9,10 +9,12 @@ The first form makes `<main>/.claude/worktrees/<name>` on branch
 forms then make `<wt>/.venv` with uv, install this checkout into it editable
 (`.[dev,codecs]` plus pybind11), configure `<wt>/build-pyext` for the
 `_core` rebuild of `tools/rebuild_core.py`, and check that the
-venv imports `tin_engine` from this worktree. A private (rasputin-lsm)
-worktree also gets the core its pyproject pins, with the core's `codecs` extra
-unless it declares imagecodecs itself; cmake is pointed at that core, and the
-check is of `rasputin_lsm` from `<wt>/src`. Each step is skipped when its
+venv imports `tin_engine` from this worktree. A plugin checkout, one whose
+pyproject has a `[tool.rasputin.worktree]` table (`package`, `source`,
+`extension`, `target`), also gets the core its pyproject pins, with the core's
+`codecs` extra unless it declares imagecodecs itself; cmake is pointed at that
+core, and the check is of the table's package from its source directory.
+Each step is skipped when its
 product is already there, so `--existing` is safe to run again; it never
 deletes anything.
 
@@ -35,7 +37,6 @@ HERE = Path(__file__).resolve().parent
 NAME = re.compile(r"[a-z0-9][a-z0-9._-]*")
 #: Per layout: the package, its source directory, its extension, the rebuild line.
 PUBLIC = ("tin_engine", "src_python", "_core", "python3 {wt}/tools/rebuild_core.py")
-PRIVATE = ("rasputin_lsm", "src", "_lsm", "cmake --build {wt}/build-pyext -j --target _lsm")
 
 
 def check_code(package: str, ext: str) -> str:
@@ -43,12 +44,14 @@ def check_code(package: str, ext: str) -> str:
             f"print({package}.cli.__file__); print(c.__file__)")  # fmt: skip
 
 
-def private_install(wt: Path) -> list[str] | None:
-    """What a rasputin-lsm checkout installs besides pybind11; None for any other."""
+def plugin(wt: Path) -> tuple[tuple[str, ...], list[str]] | None:
+    """A plugin checkout's layout and what it installs besides pybind11; None for the core's."""
     path = wt / "pyproject.toml"
-    project = tomllib.loads(path.read_text()).get("project", {}) if path.is_file() else {}
-    if project.get("name") != "rasputin-lsm":
+    data = tomllib.loads(path.read_text()) if path.is_file() else {}
+    table = data.get("tool", {}).get("rasputin", {}).get("worktree")
+    if table is None:
         return None
+    project = data.get("project", {})
     extras, deps = project.get("optional-dependencies", {}), project.get("dependencies", [])
     names = [name for name in ("dev", "codecs") if name in extras]
     pin = next((d for d in deps if d.replace(" ", "").startswith("rasputin@")), None)
@@ -56,7 +59,9 @@ def private_install(wt: Path) -> list[str] | None:
         raise Refusal(f"{path} pins no `rasputin @ <url>` core in its dependencies")
     if not any("imagecodecs" in d for d in [*deps, *(d for k in names for d in extras[k])]):
         pin = "rasputin[codecs] @" + pin.split("@", 1)[1]
-    return ["-e", f".[{','.join(names)}]", pin]
+    layout = (table["package"], table["source"], table["extension"],
+              f"cmake --build {{wt}}/build-pyext -j --target {table['target']}")  # fmt: skip
+    return layout, ["-e", f".[{','.join(names)}]", pin]
 
 
 class Refusal(Exception):  # noqa: N818  (a refusal is not an error of the tool)
@@ -127,8 +132,8 @@ def check(
 
 def set_up(run: Run, wt: Path, version: str) -> None:
     """Steps 4 to 7 of §3.2, each skipped when its product exists."""
-    py, private = str(wt / ".venv" / "bin" / "python"), private_install(wt)
-    layout = PUBLIC if private is None else PRIVATE
+    py, found_plugin = str(wt / ".venv" / "bin" / "python"), plugin(wt)
+    layout, private = (PUBLIC, None) if found_plugin is None else found_plugin
     if not (wt / ".venv").exists():
         step(run, "uv venv", ["uv", "venv", "--python", version, str(wt / ".venv")], wt)
     found, configured = check(run, wt, py, layout), (wt / "build-pyext" / "CMakeCache.txt").exists()
