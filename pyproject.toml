@@ -37,7 +37,9 @@ dependencies = [
     "pydantic>=2.6",
     "shapely>=2.2",
     "pyproj>=3.6",
-    "typer>=0.19",
+    # <0.29: typer 0.29 vendors click and drops Parameter.type, so the MCP schema
+    # derivation fails with "'TyperOption' object has no attribute 'type'".
+    "typer>=0.19,<0.29",
     "numpy>=1.26",
     "tifffile>=2024.1",
 ]
