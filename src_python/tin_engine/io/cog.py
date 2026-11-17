@@ -81,7 +81,8 @@ class NotCached(CacheError):  # noqa: N818 -- the record's name, pinned by the s
 
 
 class LocalTiffBlocks:
-    """Blocks read from an open GeoTIFF stream; it lacks none.
+    """Blocks read from an open GeoTIFF stream; it lacks none. `page` is
+    `read_page(stream, whole=True)`'s, which checked every block lies in it.
 
     `seek` and `read` share one stream, so they run under a lock:
     a read is short against a decode, and `os.pread` would exclude `BytesIO`.

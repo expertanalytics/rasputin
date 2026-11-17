@@ -10,7 +10,7 @@ and K10 (the core sees numbers in metres; CRS stays in Python).
   area against the run's noded outline, and that outline within the
   noder's snap of the moved domain).
 - A truncated DEM is a usage error in a cut run, as uncut (today: exit 2,
-  "tifffile could not decode the file", no traceback), and leaves no
+  "could not decode the file", no traceback), and leaves no
   `index.json`: a half-written run is not an index.
 - Schema drift: `MeshIndex` refuses an unknown key, a missing `tolerance`,
   and a piece id that is not three integers (`ValidationError`); it is

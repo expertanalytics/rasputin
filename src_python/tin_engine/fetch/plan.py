@@ -25,8 +25,8 @@ from pyproj import CRS
 from tin_engine.crs import crs_label, parse_crs, same_crs, transform_bounds
 from tin_engine.domain import CrsBox, DomainPolygon
 from tin_engine.fetch.http import FetchError
-from tin_engine.io.cog import block_grid, blocks_meeting
-from tin_engine.io.geotiff import read_page
+from tin_engine.io.cog import blocks_meeting
+from tin_engine.io.geotiff import BlockTableError, read_page
 from tin_engine.io.models import Bounds, GeoTiffError, IndexWindow, RasterMeta, ZUnit
 
 GAP = 64 * 1024
@@ -94,15 +94,11 @@ def parse_prefix(
     """The header from a prefix of the file, or None while the prefix lacks
     any of it: a read past its end, or an offset or byte count of a block of
     the full-resolution page (tifffile logs a short offset array and goes on,
-    so the count is the check). A geographic CRS is accepted: a source in
+    so `read_page`'s `BlockTableError` is the check). A geographic CRS is accepted: a source in
     degrees can be fetched."""
     try:
         meta, dtype, page = read_page(_Prefix(prefix), nodata=nodata, z_unit=z_unit)
-        rows, _, across = block_grid(page)
-        count = -(-int(page.imagelength) // rows) * across
-        if len(page.dataoffsets) != count or len(page.databytecounts) != count:
-            return None
-    except EOFError:
+    except (EOFError, BlockTableError):
         return None
     except GeoTiffError as exc:
         if isinstance(exc.__cause__, EOFError):

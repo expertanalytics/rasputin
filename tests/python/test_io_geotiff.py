@@ -25,6 +25,7 @@ TIFF tag their decision reads, as in §5's table.
 from __future__ import annotations
 
 import functools
+import io
 import math
 import re
 import subprocess
@@ -1152,6 +1153,63 @@ def test_undecodable_input_is_a_geotiff_error(
     assert stage.lower() in message.lower(), f"stage {stage!r} not named in {message!r}"
     assert type(cause).__name__ in message, f"{type(cause).__name__} not named in {message!r}"
     assert str(cause) in message, f"{str(cause)!r} not in {message!r}"
+
+
+def _blocks_file(**layout: Any) -> bytes:
+    """48 x 48 uncompressed float32: 9 tiles of 16 x 16, or 3 strips of 16 rows.
+    tifffile writes the IFD first, so the blocks are the file's last bytes."""
+    array = np.arange(48 * 48, dtype=np.float32).reshape(48, 48)
+    return micro_tiff(array, **layout).getvalue()
+
+
+def _patched(
+    data: bytes, code: int, *, count: int | None = None, first: int | None = None
+) -> bytes:
+    """`data` with tag `code`'s count, or its first value, rewritten; the
+    tag's 9 SHORTs or LONGs are stored at an offset, so a count of 8 reads 8."""
+    tag = tifffile.TiffFile(io.BytesIO(data)).pages.first.tags[code]
+    width = {3: 2, 4: 4}[tag.dtype]
+    assert tag.count == 9, tag.count
+    out = bytearray(data)
+    if count is not None:
+        out[tag.offset + 4 : tag.offset + 8] = count.to_bytes(4, "little")
+    if first is not None:
+        out[tag.valueoffset : tag.valueoffset + width] = first.to_bytes(width, "little")
+    return bytes(out)
+
+
+def _tiled() -> bytes:
+    return _blocks_file(tile=(16, 16))
+
+
+BROKEN_BLOCK_TABLES: dict[str, Callable[[], bytes]] = {
+    "short_byte_counts": lambda: _patched(_tiled(), 325, count=8),
+    "short_offsets": lambda: _patched(_tiled(), 324, count=8),
+    "block_past_the_end": lambda: _patched(_tiled(), 324, first=len(_tiled())),
+    "truncated_tiles": lambda: _tiled()[: len(_tiled()) // 2],
+    "truncated_strips": lambda: (d := _blocks_file(rowsperstrip=16))[: len(d) // 2],
+}
+
+
+@pytest.mark.parametrize("path", ["decode_dem", "decode_window"])
+@pytest.mark.parametrize("build", BROKEN_BLOCK_TABLES.values(), ids=BROKEN_BLOCK_TABLES.keys())
+def test_a_broken_block_table_is_refused_before_decoding(
+    build: Callable[[], bytes], path: str
+) -> None:
+    """tifffile from 2026.11.12 fills a truncated block with NoData and only
+    warns on a short table; both whole-file paths refuse all five files."""
+    from tin_engine.io.cog import LocalTiffBlocks, decode_window
+    from tin_engine.io.geotiff import decode_dem, read_page
+    from tin_engine.io.models import GeoTiffError, IndexWindow
+
+    stream = io.BytesIO(build())
+    with pytest.raises(GeoTiffError, match=r"pixel data: .*could not decode the file.*block \d"):
+        if path == "decode_dem":
+            decode_dem(stream)
+        else:
+            meta, dtype, page = read_page(stream, whole=True)
+            whole = IndexWindow(row0=0, col0=0, rows=meta.rows, cols=meta.cols)
+            decode_window(LocalTiffBlocks(page, stream, "cut.tif"), meta, dtype, whole)
 
 
 def test_geokey_directory_failure_is_a_geotiff_error(
