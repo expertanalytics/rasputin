@@ -21,7 +21,7 @@ jobs:
   # is fetched because the base commit must be in the clone.
   changes:
     name: Changed files
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       code: ${{ steps.classify.outputs.code }}
     steps:
@@ -53,14 +53,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-latest]
         hardening: ["ON"]
         # Increment 24: the unchecked build a heavy run uses
         # (RASPUTIN_HARDENING=OFF) is one nobody else compiles. This leg keeps
         # it compiling and runs the guard's OFF half (T1 compiles against
         # "none", T2 is skipped). The two legs above build the default, ON.
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             hardening: "OFF"
 
     steps:
@@ -88,7 +88,7 @@ jobs:
   # arithmetic over vertex and edge arrays than anything here today.
   sanitizers:
     name: C++ sanitizers (asan+ubsan)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: changes
     if: needs.changes.outputs.code != 'false'
     # A hang (a non-terminating refinement loop under a bug) must fail the
@@ -128,7 +128,7 @@ jobs:
   # test_border_collapse (increment 32) starts its own threads to check purity.
   tsan:
     name: C++ thread sanitizer (refinement)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: changes
     if: needs.changes.outputs.code != 'false'
     # A hang (a non-terminating refinement loop under a bug) must fail the
@@ -195,7 +195,7 @@ jobs:
   # so this job needs no install step.
   governance:
     name: Governance gates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       # fetch-depth: 0 brings the full history and the tags. check_citations.py
@@ -252,7 +252,7 @@ jobs:
 
   python:
     name: Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: changes
     if: needs.changes.outputs.code != 'false'
     strategy:
@@ -304,7 +304,7 @@ jobs:
   # The full history: test_count_loc.py recounts recorded PRs from it.
   harness:
     name: Python harness tools
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: changes
     if: needs.changes.outputs.code != 'false'
 
@@ -328,7 +328,7 @@ jobs:
   # order, each step's text unchanged; only the main suite's pytest is gone.
   python-extras:
     name: Python ${{ matrix.python-version }}, extras
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: changes
     if: needs.changes.outputs.code != 'false'
     strategy:
@@ -412,7 +412,7 @@ jobs:
     name: CI result
     if: always()
     needs: [changes, cpp, sanitizers, governance, python, python-extras, harness]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Every gating job passed, or was skipped on a prose-only change
         env:
