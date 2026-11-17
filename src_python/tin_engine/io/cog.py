@@ -81,7 +81,8 @@ class NotCached(CacheError):  # noqa: N818 -- the record's name, pinned by the s
 
 
 class LocalTiffBlocks:
-    """Blocks read from an open GeoTIFF stream; it lacks none.
+    """Blocks read from an open GeoTIFF stream; it lacks none. `page` is
+    `read_page(stream, whole=True)`'s, which checked every block lies in it.
 
     `seek` and `read` share one stream, so they run under a lock:
     a read is short against a decode, and `os.pread` would exclude `BytesIO`.
@@ -211,17 +212,11 @@ def _decode_into(
     threads: int,
 ) -> None:
     """Decode each of `indices` into its own slice of `out`, `w`'s canvas, on
-    `threads` workers; none is sparse. A block shorter or longer than its
-    byte count (a truncated file) is a `GeoTiffError`."""
+    `threads` workers; none is sparse."""
     page = source.page
 
     def put(index: int) -> None:
-        data, count = source.block(index), int(page.databytecounts[index])
-        if len(data) != count:  # tifffile >= 2026.11.12 fills a short block, no error
-            raise GeoTiffError(
-                f"{source.where}, block {index}: could not decode the file: "
-                f"failed to read {count} bytes, got {len(data)}"
-            )
+        data = source.block(index)
         with _stage(f"{source.where}, block {index}"):
             segment, (_, _, r0, c0, _), _ = page.decode(data, index)
         assert segment is not None  # a sparse block was refused or skipped by the caller

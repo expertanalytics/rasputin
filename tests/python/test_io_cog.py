@@ -33,7 +33,6 @@ import tifffile
 from cog_fixtures import (
     COLS,
     ROWS,
-    TILE,
     VARIANTS,
     AbsentBlocks,
     BytesBlocks,
@@ -372,17 +371,3 @@ class TestW5RefusalsBeforeDecoding:
             decoded(cog, geotiff, BytesBlocks(bytes(buffer), where="bad.tif"), bytes(buffer), w)
         assert "bad.tif" in str(caught.value)
         assert re.search(r"block 6\b", str(caught.value)), caught.value
-
-    def test_a_short_block_is_a_geotiff_error_naming_where_and_the_index(
-        self, cog: ModuleType, geotiff: ModuleType, window: Any
-    ) -> None:
-        # Uncompressed, so no codec fails on the short bytes: tifffile from
-        # 2026.11.12 fills a short block (zeros, then NoData) instead of raising.
-        data = build(Variant("tiled_raw", np.float32, {"tile": TILE}))
-        meta, dtype, page = geotiff.read_page(io.BytesIO(data), nodata=None)
-        offset, count = page.dataoffsets[6], page.databytecounts[6]
-        cut = io.BytesIO(data[: offset + count // 2])
-        source = cog.LocalTiffBlocks(page, cut, "cut.tif")
-        w = window(row0=10, col0=12, rows=10, cols=10)  # blocks 0, 1, 5, 6
-        with pytest.raises(GeoTiffError, match=r"cut\.tif, block 6\b.*could not decode"):
-            cog.decode_window(source, meta, dtype, w)

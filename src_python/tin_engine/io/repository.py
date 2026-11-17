@@ -163,7 +163,7 @@ class TiffDemRepository:
         """`window` of tile `name`, decoding only the blocks it meets."""
 
         def read(stream: Any, **keys: Any) -> DemTile:
-            meta, dtype, page = read_page(stream, **keys)
+            meta, dtype, page = read_page(stream, whole=True, **keys)
             blocks = LocalTiffBlocks(page, stream, name)
             return decode_window(blocks, meta, dtype, window, threads=self._threads)
 
@@ -173,7 +173,7 @@ class TiffDemRepository:
         """`window` of the class raster `name`, as `decode_class_window` gives it."""
 
         def read(stream: Any, **keys: Any) -> ClassWindow:
-            meta, _, page = read_page(stream, **keys)
+            meta, _, page = read_page(stream, whole=True, **keys)
             blocks = LocalTiffBlocks(page, stream, name)
             return decode_class_window(blocks, meta, window, threads=self._threads)
 

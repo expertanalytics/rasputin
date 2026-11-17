@@ -19,7 +19,7 @@ import importlib.util
 import math
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, BinaryIO, Literal
+from typing import Any, BinaryIO, Literal, NoReturn
 
 import numpy as np
 import pyproj
@@ -147,16 +147,23 @@ def read_page(
     nodata: float | None = None,
     geographic: bool = False,
     z_unit: ZUnit | None = None,
+    whole: bool = False,
 ) -> tuple[RasterMeta, np.dtype[Any], tifffile.TiffPage]:
     """`read_header`, and the full-resolution page itself, for `io.cog` to
     decode block by block. The same `_header`, so every refusal is the
     same. A prefix of the file that ends before its first block is enough;
     the page decodes blocks from their bytes alone after the file is closed.
     `geographic` changes nothing: every entry point reads a geographic 2D
-    CRS. The flag is kept so that its callers need not change."""
+    CRS. The flag is kept so that its callers need not change.
+
+    The block table is checked as `decode_dem` checks it (`_check_blocks`),
+    but whether each block lies inside `source` only with `whole`, the
+    caller's word that `source` is the whole file and not a prefix. A short
+    table is the `BlockTableError` subclass: a prefix may have cut it."""
     with _tiff(source, nodata) as tif:
         meta, dtype = _header(tif, nodata, z_unit)
         page = tif.pages.first
+        _check_blocks(page, int(tif.filehandle.size) if whole else None)
     return meta, PROMOTION[dtype], page
 
 
@@ -184,18 +191,15 @@ def decode_dem(
     """
     with _tiff(source, nodata) as tif:
         meta, dtype = _header(tif, nodata, z_unit)
+        page = tif.pages.first
+        _check_blocks(page, int(tif.filehandle.size))
+        if (sparse := np.flatnonzero(np.asarray(page.databytecounts) == 0)).size:
+            raise GeoTiffError(
+                f"pixel data: block {sparse[0]} is sparse (byte count 0); "
+                "a DEM's NoData must be stored, not implied"
+            )
         with _stage("pixel data"):
-            array = tif.pages.first.asarray().astype(PROMOTION[dtype], copy=False)
-        # tifffile >= 2026.11.12 fills a truncated tile with NoData, not an error
-        page, size = tif.pages.first, int(tif.filehandle.size)
-        for index, (offset, count) in enumerate(
-            zip(page.dataoffsets, page.databytecounts, strict=True)
-        ):
-            if (got := max(0, min(count, size - offset))) != count:
-                raise GeoTiffError(
-                    f"pixel data: could not decode the file: block {index}: "
-                    f"failed to read {count} bytes, got {got}"
-                )
+            array = page.asarray().astype(PROMOTION[dtype], copy=False)
     to_metres(array, meta)
     return DemTile(meta=meta, array=array)
 
@@ -215,6 +219,36 @@ def to_metres(array: np.ndarray[Any, Any], meta: RasterMeta) -> None:
             "file's NoData value, so the cell would read as NoData"
         )
     array[valid] = scaled
+
+
+class BlockTableError(GeoTiffError):
+    """The page's blocks outnumber its offsets or byte counts, or are outnumbered."""
+
+
+def _check_blocks(page: tifffile.TiffPage, size: int | None) -> None:
+    """One offset and one byte count per block of `page`, and, when `size`
+    (the file's length) is given, every block inside the file. Before any
+    decode: tifffile from 2026.11.12 fills a truncated block with NoData and
+    decodes a short table with only a warning. A sparse block (byte count 0)
+    is the decoder's call: a DEM refuses it, a class raster reads no data."""
+    rows, cols = int(page.chunks[0]), int(page.chunks[1])
+    blocks = -(-int(page.imagelength) // rows) * -(-int(page.imagewidth) // cols)
+    offsets, counts = page.dataoffsets, page.databytecounts
+    if len(offsets) != blocks or len(counts) != blocks:
+        first = min(len(offsets), len(counts), blocks)
+        _refuse(
+            f"block {first}: {blocks} blocks, {len(offsets)} offsets, {len(counts)} byte counts",
+            BlockTableError,
+        )
+    for index, (offset, count) in enumerate(zip(offsets, counts, strict=True)):
+        if size is not None and (got := max(0, min(count, size - offset))) != count:
+            _refuse(f"block {index}: failed to read {count} bytes, got {got}")
+
+
+def _refuse(text: str, kind: type[GeoTiffError] = GeoTiffError) -> NoReturn:
+    """`kind` in the form `_stage` gives a decode failure, chained from a
+    `ValueError` carrying `text`."""
+    raise kind(f"pixel data: could not decode the file: ValueError: {text}") from ValueError(text)
 
 
 @contextmanager
@@ -772,4 +806,4 @@ def _same(a: float, b: float) -> bool:
     return a == b or (math.isnan(a) and math.isnan(b))
 
 
-__all__ = ["decode_dem", "read_header", "read_meta", "read_page"]
+__all__ = ["BlockTableError", "decode_dem", "read_header", "read_meta", "read_page"]
