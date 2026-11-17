@@ -23,8 +23,8 @@ target_compile_features(terrain_headers INTERFACE cxx_std_20)
 # -ffp-contract=fast, fuses a product into each later sum that uses it, so the
 # error-free sums in the exact predicates get their tails against a value that
 # was never rounded: wrong orientations, then different meshes. Clang's default
-# fuses within one expression only and is harmless here; this makes every
-# compiler agree. INTERFACE, so the libraries, _core and the tests all get it.
+# fuses within one expression only, harmless to the predicates (not to the
+# meshes: turning it off changed macOS's); this makes every compiler agree. INTERFACE, so the libraries, _core and the tests all get it.
 target_compile_options(terrain_headers INTERFACE -ffp-contract=off)
 
 # The standard library's own bounds checks, on in every build type unless a

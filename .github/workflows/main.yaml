@@ -56,6 +56,7 @@ jobs:
         # ubuntu-latest (GCC 15, FMA by default) and ubuntu-24.04-arm (arm64,
         # FMA) are where GCC can fuse a multiply-add: the DetriaExact tests
         # fail there, and only there, if -ffp-contract=off is ever lost.
+        # ubuntu-24.04 stays on purpose: GCC 13 on x86-64 without FMA.
         os: [ubuntu-24.04, ubuntu-latest, ubuntu-24.04-arm, macos-latest]
         hardening: ["ON"]
         # Increment 24: the unchecked build a heavy run uses
@@ -63,7 +64,7 @@ jobs:
         # it compiling and runs the guard's OFF half (T1 compiles against
         # "none", T2 is skipped). The legs above build the default, ON.
         include:
-          - os: ubuntu-24.04
+          - os: ubuntu-24.04  # Unchecked build pinned to GCC 13 with the sanitizers.
             hardening: "OFF"
 
     steps:
