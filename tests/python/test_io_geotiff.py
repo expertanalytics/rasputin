@@ -25,6 +25,7 @@ TIFF tag their decision reads, as in §5's table.
 from __future__ import annotations
 
 import functools
+import io
 import math
 import re
 import subprocess
@@ -1152,6 +1153,17 @@ def test_undecodable_input_is_a_geotiff_error(
     assert stage.lower() in message.lower(), f"stage {stage!r} not named in {message!r}"
     assert type(cause).__name__ in message, f"{type(cause).__name__} not named in {message!r}"
     assert str(cause) in message, f"{str(cause)!r} not in {message!r}"
+
+
+def test_a_truncated_tiled_file_is_a_geotiff_error(
+    decode: Decode, geotiff_error: type[Exception]
+) -> None:
+    """Uncompressed tiles cut halfway: tifffile from 2026.11.12 fills a short
+    tile with NoData instead of raising, so the reader checks the lengths."""
+    data = micro_tiff(np.arange(48 * 48, dtype=np.float32).reshape(48, 48), tile=(16, 16))
+    raw = data.getvalue()
+    with pytest.raises(geotiff_error, match=r"pixel data: .*could not decode the file"):
+        decode(io.BytesIO(raw[: len(raw) // 2]))
 
 
 def test_geokey_directory_failure_is_a_geotiff_error(

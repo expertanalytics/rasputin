@@ -217,7 +217,7 @@ def _decode_into(
 
     def put(index: int) -> None:
         data, count = source.block(index), int(page.databytecounts[index])
-        if len(data) != count:  # tifffile >= 2026.11.12 pads a short block with zeros
+        if len(data) != count:  # tifffile >= 2026.11.12 fills a short block, no error
             raise GeoTiffError(
                 f"{source.where}, block {index}: could not decode the file: "
                 f"failed to read {count} bytes, got {len(data)}"

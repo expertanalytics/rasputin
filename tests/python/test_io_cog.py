@@ -377,7 +377,7 @@ class TestW5RefusalsBeforeDecoding:
         self, cog: ModuleType, geotiff: ModuleType, window: Any
     ) -> None:
         # Uncompressed, so no codec fails on the short bytes: tifffile from
-        # 2026.11.12 pads a short block with zeros instead of raising.
+        # 2026.11.12 fills a short block (zeros, then NoData) instead of raising.
         data = build(Variant("tiled_raw", np.float32, {"tile": TILE}))
         meta, dtype, page = geotiff.read_page(io.BytesIO(data), nodata=None)
         offset, count = page.dataoffsets[6], page.databytecounts[6]

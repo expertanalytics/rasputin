@@ -186,6 +186,16 @@ def decode_dem(
         meta, dtype = _header(tif, nodata, z_unit)
         with _stage("pixel data"):
             array = tif.pages.first.asarray().astype(PROMOTION[dtype], copy=False)
+        # tifffile >= 2026.11.12 fills a truncated tile with NoData, not an error
+        page, size = tif.pages.first, int(tif.filehandle.size)
+        for index, (offset, count) in enumerate(
+            zip(page.dataoffsets, page.databytecounts, strict=True)
+        ):
+            if (got := max(0, min(count, size - offset))) != count:
+                raise GeoTiffError(
+                    f"pixel data: could not decode the file: block {index}: "
+                    f"failed to read {count} bytes, got {got}"
+                )
     to_metres(array, meta)
     return DemTile(meta=meta, array=array)
 
