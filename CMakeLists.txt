@@ -19,6 +19,14 @@ target_include_directories(terrain_headers INTERFACE
 )
 target_compile_features(terrain_headers INTERFACE cxx_std_20)
 
+# No fused multiply-add the source does not write. GCC's default,
+# -ffp-contract=fast, fuses a product into each later sum that uses it, so the
+# error-free sums in the exact predicates get their tails against a value that
+# was never rounded: wrong orientations, then different meshes. Clang's default
+# fuses within one expression only and is harmless here; this makes every
+# compiler agree. INTERFACE, so the libraries, _core and the tests all get it.
+target_compile_options(terrain_headers INTERFACE -ffp-contract=off)
+
 # The standard library's own bounds checks, on in every build type unless a
 # heavy run asks for an unchecked build (docs/increments/24-release-hardening.md
 # section 3; about 5 % on refine). INTERFACE, so every target built against the
@@ -112,7 +120,8 @@ if(RASPUTIN_BUILD_PYTHON)
 
     # The headers a plugin compiles against, and a CMake config for
     # find_package(rasputin): rasputin::terrain_headers, carrying C++20 and the
-    # definitions the core was built with, so the shared headers compile alike.
+    # definitions and -ffp-contract=off the core was built with, so the shared
+    # headers compile alike.
     install(DIRECTORY include/terrain DESTINATION tin_engine/include)
     install(FILES bindings/numpy_raster.hpp DESTINATION tin_engine/include/rasputin_bindings)
     get_target_property(RASPUTIN_DEFINITIONS terrain_headers INTERFACE_COMPILE_DEFINITIONS)
@@ -126,7 +135,8 @@ if(NOT TARGET rasputin::terrain_headers)
     set_target_properties(rasputin::terrain_headers PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES "${_rasputin_include}"
         INTERFACE_COMPILE_FEATURES cxx_std_20
-        INTERFACE_COMPILE_DEFINITIONS "@RASPUTIN_DEFINITIONS@")
+        INTERFACE_COMPILE_DEFINITIONS "@RASPUTIN_DEFINITIONS@"
+        INTERFACE_COMPILE_OPTIONS -ffp-contract=off)
     unset(_rasputin_include)
 endif()
 ]])
