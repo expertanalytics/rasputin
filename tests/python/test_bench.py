@@ -24,6 +24,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterator, Sequence
+from datetime import datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -98,6 +99,34 @@ def test_parse_pmset(bench: ModuleType, text: str, state: str, percent: int | No
 def test_combine_power(bench: ModuleType, before: str, after: str, state: str) -> None:
     combined = bench.combine_power(bench.parse_pmset(before), bench.parse_pmset(after))
     assert combined.state == state
+
+
+PMSET_LOG = """\
+2026-11-17 10:59:59 +0100 Sleep               \tEntering Sleep state due to 'Idle Sleep' Using AC
+2026-11-17 11:00:00 +0100 Assertions          \tPID 1(x) Created PreventUserIdleSystemSleep
+2026-11-17 11:05:00 +0100 Sleep               \tEntering Sleep state due to 'Clamshell Sleep'
+2026-11-17 11:06:00 +0100 DarkWake            \tDarkWake from Deep Idle [CDNP] Using BATT
+2026-11-17 11:06:01 +0100 Wake Requests       \t[process=dasd request=SleepService]
+2026-11-17 11:06:01 +0100 WakeDetails         \tDriverReason:UserActivity
+2026-11-17 11:07:00 +0100 Wake                \tDarkWake to FullWake from Deep Idle Using BATT
+2026-11-17 11:10:01 +0100 Wake                \tWake from Deep Idle Using AC
+"""
+
+
+def test_parse_sleeps_keeps_sleep_and_wake_lines_inside_the_run(bench: ModuleType) -> None:
+    """`pmset -g log`'s Sleep, Wake and DarkWake lines from the run's start to
+    its end; the start's fraction of a second does not drop an event in it."""
+    start = datetime.fromisoformat("2026-11-17T11:00:00.700+01:00")
+    end = datetime.fromisoformat("2026-11-17T11:10:00.300+01:00")
+    events = bench.parse_sleeps(PMSET_LOG, start, end)
+    assert [e.split()[3] for e in events] == ["Sleep", "DarkWake", "Wake"]
+    assert "Clamshell Sleep" in events[0]
+    assert bench.parse_sleeps("", start, end) == []
+
+
+def test_a_linux_host_reads_no_sleeps(bench: ModuleType, tmp_path: Path) -> None:
+    now = datetime.now().astimezone()
+    assert bench.LinuxHost(tmp_path).sleeps(now, now) is None
 
 
 # --------------------------------------------------------------- child output
@@ -913,8 +942,13 @@ class FakeRunner:
         refine_s: float = 1.0,
         child_code: int = 0,
         modes: Sequence[str] | None = None,
+        sleep: bool = False,
     ) -> None:
         self.bench = bench
+        #: `pmset -g log` answers with one Sleep line stamped at the first
+        #: `pmset -g batt` call, the run's start, when ``sleep`` is set.
+        self.sleep = sleep
+        self.first_batt: datetime | None = None
         #: Increment 24: the ``hardening`` each child reports, in turn (cycled);
         #: None reports none, as a child of an older tree's ``_core`` does not.
         self.modes = list(modes) if modes is not None else None
@@ -932,7 +966,12 @@ class FakeRunner:
         program = Path(args[0]).name
         if "_child" in args:
             return self._child(args)
+        if program == "pmset" and "log" in args:
+            stamp = (self.first_batt or datetime.now().astimezone()).strftime("%F %T %z")
+            line = f"{stamp} Sleep               \tEntering Sleep state due to 'Idle Sleep'\n"
+            return completed(self.bench, line if self.sleep else "")
         if program == "pmset":
+            self.first_batt = self.first_batt or datetime.now().astimezone()
             return completed(self.bench, self.pmset.pop(0))
         if program == "sysctl":
             return completed(self.bench, SYSCTL.get(args[-1], "0") + "\n")
@@ -1036,13 +1075,14 @@ def test_run_samples_interleaved_with_power_bracketing(
 
     pmset = [i for i, c in enumerate(fake.calls) if Path(c[0]).name == "pmset"]
     child_at = [i for i, c in enumerate(fake.calls) if "_child" in c]
-    assert len(pmset) == 2
+    assert [fake.calls[i][-1] for i in pmset] == ["batt", "batt", "log"]
     assert pmset[0] < child_at[0] and pmset[1] > child_at[-1]
     assert not any(Path(c[0]).name == "cmake" for c in fake.calls)
 
     data = run_json(workspace, "t1")
     assert data["build"]["no_build"] is True
     assert data["power"]["state"] == "ac"
+    assert (data["slept"], data["sleeps"]) == (False, [])
     assert len(data["samples"]) == 6
     assert {(s["domain"], s["threads"]) for s in data["stats"]} == {
         ("tile", 0),
@@ -1072,6 +1112,32 @@ def test_run_passes_extra_mesh_args_and_records_them(
         at = mesh_args.index("--start-min-angle")
         assert mesh_args[at + 1] == "0"
     assert run_json(workspace, "t1")["inputs"]["extra_args"] == ["--start-min-angle", "0"]
+
+
+def test_run_refuses_to_start_on_battery(
+    bench: ModuleType, workspace: dict[str, Path], use_runner: Callable[[Any], None]
+) -> None:
+    """2026-11-17: a timing on battery across two laptop sleeps was void."""
+    fake = FakeRunner(bench, pmset=(BATTERY,))
+    use_runner(fake)
+    result = cli.invoke(bench.app, run_args(workspace, "t1"))  # refused before the build
+    assert result.exit_code == 3, result.output
+    assert "battery power" in result.output
+    assert not fake.children()
+    assert not any(Path(c[0]).name == "cmake" for c in fake.calls)
+    assert not list(workspace["out_root"].rglob("run.json"))
+
+
+def test_run_marks_a_sleep_inside_it(
+    bench: ModuleType, workspace: dict[str, Path], use_runner: Callable[[Any], None]
+) -> None:
+    use_runner(FakeRunner(bench, sleep=True))
+    result = cli.invoke(bench.app, [*run_args(workspace, "t1"), "--no-build"])
+    assert result.exit_code == 2, result.output
+    data = run_json(workspace, "t1")
+    assert data["slept"] is True
+    assert [e.split()[3] for e in data["sleeps"]] == ["Sleep"]
+    assert "slept" in result.output
 
 
 def test_run_marks_changed_power_as_mixed(
@@ -1149,8 +1215,8 @@ def test_run_finds_the_previous_run_as_baseline(
 def test_run_does_not_compare_ac_with_a_stored_battery_run(
     bench: ModuleType, workspace: dict[str, Path], use_runner: Callable[[Any], None]
 ) -> None:
-    use_runner(FakeRunner(bench, pmset=(BATTERY, BATTERY)))
-    cli.invoke(bench.app, [*run_args(workspace, "base"), "--no-build"])
+    battery = {"state": "battery", "percent": 88, "raw": BATTERY}
+    bench.write_evidence(make(bench, power=battery), workspace["out_root"] / "2026-09-27/base")
     use_runner(FakeRunner(bench, refine_s=5.0))
     result = cli.invoke(bench.app, [*run_args(workspace, "new"), "--no-build"])
     assert result.exit_code == 2, result.output

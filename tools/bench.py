@@ -49,6 +49,8 @@ CEILING_2026_09_26 = "2.2x"
 #: The README's generated part ends at this line; what follows it is @perf's.
 MARKER = "<!-- bench.py: generated above this line; hand-written prose below is kept -->"
 PMSET = ["pmset", "-g", "batt"]
+#: A ``pmset -g log`` line of a sleep or a wake: its time, then the event's name.
+SLEEP_LINE = re.compile(r"^(\S+ \S+ [+-]\d{4}) +(Sleep|Wake|DarkWake) +\t.*$", re.MULTILINE)
 CHILD_KEYS = ("refine_s", "app_s", "max_error", "rounds", "inserted", "flips")
 
 State = Literal["ac", "battery", "mixed", "unknown"]
@@ -202,6 +204,10 @@ class RunRecord(BaseModel):
     #: The bounds checks the children's ``_core`` reported (increment 24); a
     #: run.json from before it loads as "none", which every such run was.
     hardening: str = "none"
+    #: The sleep and wake lines inside the run; None: not read (Linux, or a
+    #: run.json from before 2026-11-17). Any line voids the timing.
+    sleeps: list[str] | None = None
+    slept: bool | None = None
 
 
 class ChildError(ValueError):
@@ -252,6 +258,14 @@ def parse_pmset(text: str) -> Power:
     )
     percent = re.search(r"\t(\d+)%;", text)
     return Power(state=state, percent=int(percent.group(1)) if percent else None, raw=text)
+
+
+def parse_sleeps(text: str, start: datetime, end: datetime) -> list[str]:
+    """``pmset -g log``'s Sleep, Wake and DarkWake lines from ``start`` to
+    ``end``; the log counts whole seconds, so ``start``'s fraction is dropped."""
+    first = start.replace(microsecond=0)
+    return [m.group(0).rstrip() for m in SLEEP_LINE.finditer(text)
+            if first <= datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S %z") <= end]  # fmt: skip
 
 
 def combine_power(before: Power, after: Power) -> Power:
@@ -484,7 +498,8 @@ def _readme(r: RunRecord) -> list[str]:
         f"- {m.cpu_brand}, {m.p_cores} P + {m.e_cores} E cores, {m.memory_bytes / 2**30:.0f} GiB, "
         f"{m.system} {m.os_version}, Python {m.python}, numpy {m.numpy}, "
         f"shapely {m.shapely} (GEOS {m.geos}), pyproj {m.pyproj} (PROJ {m.proj}).",
-        f"- Power **{p.state}** ({p.percent}%), read before and after (raw text in run.json).",
+        f"- Power **{p.state}** ({p.percent}%), read before and after (raw text in run.json); "
+        f"slept during the run: **{r.slept}** (sleep and wake lines in run.json).",
         f"- DEM `{i.dem}` (sha256 `{i.dem_sha256}`), tolerance {i.tolerance}, extra mesh args "
         f"`{' '.join(i.extra_args)}`; domains: "
         + ", ".join(f"`{d.name}` ({d.path or 'the whole tile'})" for d in i.domains) + ".",
@@ -598,6 +613,7 @@ def _versions() -> dict[str, str]:
 class Host(Protocol):
     def machine(self) -> Machine: ...
     def power(self) -> Power: ...
+    def sleeps(self, start: datetime, end: datetime) -> list[str] | None: ...
 
 
 class MacHost:
@@ -619,6 +635,9 @@ class MacHost:
 
     def power(self) -> Power:
         return parse_pmset(self.runner.run(PMSET).stdout)
+
+    def sleeps(self, start: datetime, end: datetime) -> list[str] | None:
+        return parse_sleeps(self.runner.run(["pmset", "-g", "log"]).stdout, start, end)
 
 
 #: The only files of a power supply read: ``uevent`` repeats them and could disagree.
@@ -695,6 +714,9 @@ class LinuxHost:
             state=state, percent=int(capacity) if capacity.isdigit() else None,
             raw="\n".join(lines) or f"no power supply under /{SUPPLIES}",
         )  # fmt: skip
+
+    def sleeps(self, start: datetime, end: datetime) -> list[str] | None:
+        return None  # no reader yet: unknown
 
 
 def make_host(runner: Runner, system: str = sys.platform) -> Host:
@@ -815,6 +837,9 @@ def run(
     meshes = mesh_dir or Path(tempfile.gettempdir()) / "rasputin-bench" / label
     meshes.mkdir(parents=True, exist_ok=True)
     try:
+        before = host.power()
+        if before.state == "battery":
+            raise BenchError("on battery power: a timed run needs the AC adapter; plug in")
         if no_build:
             pkg, built = None, Build(no_build=True)
         else:
@@ -824,7 +849,7 @@ def run(
         commit = _checked(runner, ["git", "-C", str(tree), "rev-parse", "HEAD"]).stdout.strip()
         dirty = bool(runner.run(["git", "-C", str(tree), "status", "--porcelain"]).stdout.strip())
         blob = runner.run(["git", "-C", str(REPO), "hash-object", str(BENCH)]).stdout.strip()
-        machine, before = host.machine(), host.power()
+        machine = host.machine()
         samples, qualities, modes = _measure(
             runner, head, domains, mesh, counts, repeats, meshes, tolerance, label
         )
@@ -834,6 +859,7 @@ def run(
         if hardening is not None and (hardening == "on") != (mode != "none"):
             raise BenchError(f"--hardening {hardening}, but the children's _core reports {mode}")
         power = combine_power(before, host.power())
+        sleeps = host.sleeps(started, datetime.now().astimezone())
     except BenchError as exc:
         typer.echo(f"bench: {exc}")
         raise typer.Exit(3) from exc
@@ -845,12 +871,14 @@ def run(
                       tolerance=tolerance, extra_args=list(extra or [])),
         samples=samples, stats=median_stats(samples), quality=qualities,
         accept_quality=accept_quality, threshold_pct=threshold, hardening=mode,
+        sleeps=sleeps, slept=None if sleeps is None else bool(sleeps),
     )  # fmt: skip
     v = _judge(runner, record, base, out_root, tree)
     record.verdict = v.lines
     directory = out_root / started.date().isoformat() / label
     write_evidence(record, directory)
-    typer.echo(f"power: {power.state}; evidence: {directory}; meshes: {meshes}")
+    slept = {None: "unknown", True: "yes, timing void", False: "no"}[record.slept]
+    typer.echo(f"power: {power.state}; slept: {slept}; evidence: {directory}; meshes: {meshes}")
     typer.echo("\n".join(v.lines))
     raise typer.Exit(v.exit_code)
 
