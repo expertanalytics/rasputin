@@ -1,0 +1,513 @@
+{
+ "label": "gcc15-head-g16",
+ "started": "2026-11-17T17:49:02.306961+01:00",
+ "tree": {
+  "commit": "d029ffbf540cc47c7100800be697b46461bd45b5",
+  "dirty": false
+ },
+ "bench_blob": "16ad2ff52bdef716a23214fa4c877a497a2bef6c",
+ "child_argv": [
+  "/Users/skavhaug/projects/rasputin/.claude/worktrees/gcc15-predicates/.venv/bin/python",
+  "/Users/skavhaug/projects/rasputin/.claude/worktrees/gcc15-predicates/tools/bench.py",
+  "_child",
+  "--pkg",
+  "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/250e6b2b-1a4e-4bd4-83ef-16e96f9c1134/scratchpad/head-g16/build-bench/pkg",
+  "--threads",
+  "<N>",
+  "--",
+  "mesh",
+  "--dem",
+  "/Users/skavhaug/projects/rasputin/.claude/worktrees/gcc15-predicates/tests/fixtures/dem_archive/7908_3_10m_z33.tif",
+  "--tolerance",
+  "1",
+  "--out",
+  "<path>",
+  "--binary"
+ ],
+ "build": {
+  "no_build": false,
+  "type": "Release",
+  "cxx_flags_release": "-O3 -DNDEBUG",
+  "compiler": "GNU 16.2.0",
+  "so_sha256": "2de956026b0aa28f23ea699d1109420b87919cd646b27a0d2459f643efb35272"
+ },
+ "machine": {
+  "cpu_brand": "Apple M1 Max",
+  "p_cores": 8,
+  "e_cores": 2,
+  "memory_bytes": 34359738368,
+  "system": "macOS",
+  "os_version": "27.0.1",
+  "python": "3.14.7",
+  "numpy": "2.5.5",
+  "shapely": "2.2.0",
+  "geos": "3.14.1",
+  "pyproj": "3.8.0",
+  "proj": "9.8.1"
+ },
+ "power": {
+  "state": "mixed",
+  "percent": 79,
+  "raw": "Now drawing from 'Battery Power'\n -InternalBattery-0 (id=23658595)\t79%; discharging; (no estimate) present: true\n--- after ---\nNow drawing from 'AC Power'\n -InternalBattery-0 (id=23658595)\t79%; AC attached; not charging present: true\n"
+ },
+ "inputs": {
+  "dem": "/Users/skavhaug/projects/rasputin/.claude/worktrees/gcc15-predicates/tests/fixtures/dem_archive/7908_3_10m_z33.tif",
+  "dem_sha256": "aabd0cbc28471ce8593e4c278381811bec3fbf4e1194058b3b4888d00c3af575",
+  "domains": [
+   {
+    "name": "tile",
+    "path": null,
+    "sha256": null
+   },
+   {
+    "name": "quarter",
+    "path": "/Users/skavhaug/projects/rasputin/.claude/worktrees/gcc15-predicates/docs/benchmarks/2026-09-26/quarter.geojson",
+    "sha256": "b7f7bbe96848383c77863ce29ee28c45bce087601a1738ee82ddb4ffb8279d1e"
+   }
+  ],
+  "tolerance": 1.0,
+  "extra_args": []
+ },
+ "samples": [
+  {
+   "domain": "tile",
+   "threads": 0,
+   "repeat": 0,
+   "refine_s": 0.26277674990706146,
+   "app_s": 0.5810202080756426,
+   "proc_s": 1.347215916030109,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "repeat": 0,
+   "refine_s": 0.6729530841112137,
+   "app_s": 0.9977012921590358,
+   "proc_s": 1.3032007089350373,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "repeat": 0,
+   "refine_s": 0.252383999992162,
+   "app_s": 0.5646398751996458,
+   "proc_s": 0.8638650828506798,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 0,
+   "repeat": 1,
+   "refine_s": 0.24107887502759695,
+   "app_s": 0.5522249999921769,
+   "proc_s": 0.8525531671475619,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "repeat": 1,
+   "refine_s": 0.6250877920538187,
+   "app_s": 0.932308082934469,
+   "proc_s": 1.2328200407791883,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "repeat": 1,
+   "refine_s": 0.25728649995289743,
+   "app_s": 0.5776652079075575,
+   "proc_s": 0.8742172908969223,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 0,
+   "repeat": 2,
+   "refine_s": 0.3027147089596838,
+   "app_s": 0.6196981249377131,
+   "proc_s": 0.9227730000857264,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "repeat": 2,
+   "refine_s": 0.6459946669638157,
+   "app_s": 0.9533846250269562,
+   "proc_s": 1.2596521249506623,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "repeat": 2,
+   "refine_s": 0.2462078749667853,
+   "app_s": 0.5602357918396592,
+   "proc_s": 0.859220250044018,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 0,
+   "repeat": 3,
+   "refine_s": 0.24630816699936986,
+   "app_s": 0.5558820418082178,
+   "proc_s": 0.8546264581382275,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "repeat": 3,
+   "refine_s": 0.656059208093211,
+   "app_s": 0.9632204591762275,
+   "proc_s": 1.2675304159056395,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "repeat": 3,
+   "refine_s": 0.24062841688282788,
+   "app_s": 0.5448072920553386,
+   "proc_s": 0.8429682080168277,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 0,
+   "repeat": 4,
+   "refine_s": 0.2687171248253435,
+   "app_s": 0.5960716248955578,
+   "proc_s": 0.9080587909556925,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "repeat": 4,
+   "refine_s": 0.647496541030705,
+   "app_s": 0.9544712922070175,
+   "proc_s": 1.2567082501482219,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "repeat": 4,
+   "refine_s": 0.24840674991719425,
+   "app_s": 0.5639134161174297,
+   "proc_s": 0.867526583140716,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "repeat": 0,
+   "refine_s": 0.212106374790892,
+   "app_s": 0.46101670805364847,
+   "proc_s": 0.752171624917537,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "repeat": 0,
+   "refine_s": 0.6081631251145154,
+   "app_s": 0.8884222500491887,
+   "proc_s": 1.1705554998479784,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "repeat": 0,
+   "refine_s": 0.21281804190948606,
+   "app_s": 0.4619937080424279,
+   "proc_s": 0.7431594170629978,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "repeat": 1,
+   "refine_s": 0.21139295818284154,
+   "app_s": 0.4578904998488724,
+   "proc_s": 0.7393740408588201,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "repeat": 1,
+   "refine_s": 0.5442061249632388,
+   "app_s": 0.7991139169316739,
+   "proc_s": 1.0888321250677109,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "repeat": 1,
+   "refine_s": 0.2125318751204759,
+   "app_s": 0.46487012482248247,
+   "proc_s": 0.7457996248267591,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "repeat": 2,
+   "refine_s": 0.21954354201443493,
+   "app_s": 0.4739621670451015,
+   "proc_s": 0.7520521669648588,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "repeat": 2,
+   "refine_s": 0.5342096660751849,
+   "app_s": 0.7912109168246388,
+   "proc_s": 1.0723772500641644,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "repeat": 2,
+   "refine_s": 0.22077454207465053,
+   "app_s": 0.49633433297276497,
+   "proc_s": 0.7861289579886943,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "repeat": 3,
+   "refine_s": 0.23529020906426013,
+   "app_s": 0.5094129999633878,
+   "proc_s": 0.79579725000076,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "repeat": 3,
+   "refine_s": 0.6081727091223001,
+   "app_s": 0.8720219999086112,
+   "proc_s": 1.1926166249904782,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "repeat": 3,
+   "refine_s": 0.22274541691876948,
+   "app_s": 0.48175354092381895,
+   "proc_s": 0.7823332499247044,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "repeat": 4,
+   "refine_s": 0.20882320892997086,
+   "app_s": 0.46097324998117983,
+   "proc_s": 0.7584922087844461,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "repeat": 4,
+   "refine_s": 0.5439772082027048,
+   "app_s": 0.7896097090560943,
+   "proc_s": 1.091877582948655,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "repeat": 4,
+   "refine_s": 0.21197704202495515,
+   "app_s": 0.4575093339662999,
+   "proc_s": 0.7416586661711335,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  }
+ ],
+ "stats": [
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "n": 5,
+   "median": 0.212106374790892,
+   "min": 0.20882320892997086,
+   "max": 0.23529020906426013
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "n": 5,
+   "median": 0.5442061249632388,
+   "min": 0.5342096660751849,
+   "max": 0.6081727091223001
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "n": 5,
+   "median": 0.21281804190948606,
+   "min": 0.21197704202495515,
+   "max": 0.22274541691876948
+  },
+  {
+   "domain": "tile",
+   "threads": 0,
+   "n": 5,
+   "median": 0.26277674990706146,
+   "min": 0.24107887502759695,
+   "max": 0.3027147089596838
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "n": 5,
+   "median": 0.647496541030705,
+   "min": 0.6250877920538187,
+   "max": 0.6729530841112137
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "n": 5,
+   "median": 0.24840674991719425,
+   "min": 0.24062841688282788,
+   "max": 0.25728649995289743
+  }
+ ],
+ "quality": {
+  "tile": {
+   "worst_angle": 0.6295986084102668,
+   "angle_median": 45.0,
+   "share_under_1": 2.1538262723728703e-6,
+   "max_degree": 74,
+   "within_tolerance": true,
+   "delaunay_checked": 692056,
+   "delaunay_ambiguous": 94469,
+   "delaunay_violations": 0,
+   "mesh_sha256": "11741a81adfa17b34a1ea56875ec9e791414d17625eb1c58305e7c0cf10e005c"
+  },
+  "quarter": {
+   "worst_angle": 0.3955267116350698,
+   "angle_median": 45.0,
+   "share_under_1": 0.000028023109724486125,
+   "max_degree": 18,
+   "within_tolerance": true,
+   "delaunay_checked": 641792,
+   "delaunay_ambiguous": 80136,
+   "delaunay_violations": 0,
+   "mesh_sha256": "a60fb597b5b738268a3bd27730989392ee86fb030fe060b78fd3a0bcdbb60a34"
+  }
+ },
+ "accept_quality": false,
+ "threshold_pct": 5.0,
+ "verdict": [
+  "NO BASELINE: power: mixed vs battery"
+ ],
+ "hardening": "libstdc++ assertions"
+}
