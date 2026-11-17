@@ -211,11 +211,17 @@ def _decode_into(
     threads: int,
 ) -> None:
     """Decode each of `indices` into its own slice of `out`, `w`'s canvas, on
-    `threads` workers; none is sparse."""
+    `threads` workers; none is sparse. A block shorter or longer than its
+    byte count (a truncated file) is a `GeoTiffError`."""
     page = source.page
 
     def put(index: int) -> None:
-        data = source.block(index)
+        data, count = source.block(index), int(page.databytecounts[index])
+        if len(data) != count:  # tifffile >= 2026.11.12 pads a short block with zeros
+            raise GeoTiffError(
+                f"{source.where}, block {index}: could not decode the file: "
+                f"failed to read {count} bytes, got {len(data)}"
+            )
         with _stage(f"{source.where}, block {index}"):
             segment, (_, _, r0, c0, _), _ = page.decode(data, index)
         assert segment is not None  # a sparse block was refused or skipped by the caller
