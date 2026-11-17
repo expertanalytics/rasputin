@@ -9,6 +9,12 @@
 
 #include <detria.hpp>
 
+// detria's exact predicates need every product and sum rounded as written;
+// fast-math reassociates and fuses them (CMakeLists.txt, -ffp-contract=off).
+#ifdef __FAST_MATH__
+#error "detria's exact predicates are wrong under -ffast-math"
+#endif
+
 namespace terrain::pred {
 
 namespace {

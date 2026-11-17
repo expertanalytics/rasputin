@@ -7,8 +7,8 @@ before the height shares), in a worktree whose code was that commit's, by
 the functions below, three runs alike. The `.gpkg` digest is
 `height_fixtures.gpkg_digest`'s, which leaves out the run rows the host
 fills (`command`, `threads`, `rasputin_version`). The cut, Velhas and
-`class_areas` digests were re-recorded the same way at f4ba684c, when the
-core began building with `-ffp-contract=off`; the steps digests did not move.
+`class_areas` digests were re-recorded the same way when the core began
+building with `-ffp-contract=off`; the steps digests did not move.
 
 A recorded digest pins a platform as well as a behaviour: every digest here
 is keyed by (`sys.platform`, `platform.machine()`) and a platform without

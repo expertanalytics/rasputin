@@ -105,7 +105,7 @@ BAND_DEFAULT = 50.0  # increment 32, section 6: half CORINE's positional accurac
 #: 0``. Read from CI run 37914928683 (ubuntu-latest, PR #222 at d5b2ba4c), the
 #: same on Python 3.12, 3.13 and 3.14, so the pin guards the band-0 mesh
 #: against change from d5b2ba4c on. Since the core builds with
-#: ``-ffp-contract=off`` (f4ba684c) macOS arm64 gives this mesh too; its own
+#: ``-ffp-contract=off`` macOS arm64 gives this mesh too; its own
 #: digest before that, 29963a44, came from fused multiply-adds.
 BAND_0_TODAY = "9cd16850288f77e6ef8aa32bfa3456f2638d3c97554ffd9b90030959ea10a635"
 #: Section 15.4's wording (the fix moved the band after the outline rule; the
