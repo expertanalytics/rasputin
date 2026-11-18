@@ -240,9 +240,12 @@ def test_the_commit_is_checked_in_the_ledgers_own_repository(paths: tuple[Path, 
 LINE = "Two delays in series slow the response twice over."
 
 
-def asked(paths: tuple[Path, Path], text: str, words: str | None) -> str:
+def asked(
+    paths: tuple[Path, Path], text: str, words: str | None, context: str | None = "Why it is asked."
+) -> str:
     """Store a question in the store beside the search record, answered with `words`."""
-    record = {"id": "q7", "kind": "question", "text": text, "default": "keep it",
+    record: dict[str, object] = {"id": "q7", "kind": "question", "text": text, "default": "keep it",
+              **({"context": context} if context else {}),
               "choices": [], "item": None, "source": "main", "state": "open", "words": None,
               "at": STAMP}  # fmt: skip
     store = paths[1].with_name("questions.jsonl")
@@ -303,6 +306,18 @@ def test_replace_takes_an_answered_question_too(paths: tuple[Path, Path]) -> Non
     qid = asked(paths, f'May the ledger say: "{LINE}"?', "Agreed.")
     run(paths, "replace", "1", LINE, "--question", qid)
     assert [e["text"] for e in entries(paths)] == [LINE]
+
+
+@pytest.mark.parametrize("cmd", ["add", "replace"])
+def test_a_question_without_context_is_refused(paths: tuple[Path, Path], cmd: str) -> None:
+    add(paths, "First result.", "a")
+    qid = asked(paths, f'May the ledger say: "{LINE}"?', "Yes", context=None)
+    with pytest.raises(findings.RefusedError, match="context"):
+        if cmd == "add":
+            by_question(paths, qid)
+        else:
+            run(paths, "replace", "1", LINE, "--question", qid)
+    assert [e["text"] for e in entries(paths)] == ["First result."]
 
 
 def test_ola_and_question_together_are_refused(paths: tuple[Path, Path]) -> None:

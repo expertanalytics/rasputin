@@ -26,6 +26,9 @@ import findings  # beside this file
 ROOT = Path(__file__).resolve().parents[1]
 #: Chosen: two lines of the recap's 120 characters.
 LIMIT = 240
+#: Chosen: one or two plain sentences of context (Ola, 2026-11-18).
+CONTEXT_LIMIT = 400
+LEDGER = re.compile(r"\bledger\b", re.I)
 NO_DEFAULT = {"", "none", "tbd", "?", "-"}
 ELSEWHERE = re.compile(r"\b(?:see above|as above|as before|previous question|question \d+)\b", re.I)
 COUNTED = re.compile(r"\b(?:increment|row) \d+", re.I)
@@ -128,13 +131,21 @@ def _check(args: argparse.Namespace, records: list[dict[str, Any]], kind: str) -
     _plain(text, set(args.term or ()), kind == "act")
     if len(text) + len(default) > LIMIT:
         raise RefusedError(f"at most {LIMIT} characters; say the rest in the increment file")
+    context = getattr(args, "context", None)
+    if kind == "question" and not context and LEDGER.search(text):
+        raise RefusedError("a ledger question needs --context: what the line measures and why")
+    if context:
+        _plain(context, set(args.term or ()), False)
+        if len(context) > CONTEXT_LIMIT:
+            raise RefusedError(f"the context is at most {CONTEXT_LIMIT} characters")
 
 
 def _line(n: int, r: dict[str, Any]) -> str:
     if r["kind"] == "taken":
         return f"{n}. Taken: {r['text'].rstrip('.')}. Veto by number."
     choices = f" Choices: {', '.join(r['choices'])}." if r["choices"] else ""
-    return f"{n}. {r['text']}{choices} Default: {r['default'].rstrip('.')}."
+    context = f"{r['context']} " if r.get("context") else ""
+    return f"{n}. {context}{r['text']}{choices} Default: {r['default'].rstrip('.')}."
 
 
 def open_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -152,12 +163,15 @@ def list_lines(records: list[dict[str, Any]]) -> list[str]:
     return [_line(n, r) for n, r in enumerate(open_records(records), 1)]
 
 
-def _numbered(store: Path, records: list[dict[str, Any]], n: int) -> dict[str, Any]:
-    """The record the last `list` printed as number `n`, still open."""
+def _numbered(store: Path, records: list[dict[str, Any]], n: str) -> dict[str, Any]:
+    """The open record with stored id `n`, as q387, or the last `list`'s number `n`."""
     path = _shown_path(store)
     ids: dict[str, str] = json.loads(path.read_text()) if path.exists() else {}
-    record = next((r for r in records if r["id"] == ids.get(str(n))), None)
+    qid = n if n.startswith("q") else ids.get(n)
+    record = next((r for r in records if r["id"] == qid), None)
     if record is None or record["state"] != "open":
+        if qid == n:
+            raise RefusedError(f"there is no open question {n}")
         raise RefusedError(f"the last list printed no open question numbered {n}")
     return record
 
@@ -177,6 +191,7 @@ def command(args: argparse.Namespace, store: Path, now: datetime) -> list[str]:
             "id": f"q{number + 1}",
             "kind": kind,
             "text": args.text,
+            "context": getattr(args, "context", None),
             "default": args.default,
             "choices": choices,
             "item": getattr(args, "item", None),
@@ -220,12 +235,13 @@ def parser() -> argparse.ArgumentParser:
             s.add_argument("--choices", default="", help="the answers, separated by |")
             s.add_argument("--act", action="store_true", help="a publishing act awaiting a yes")
             s.add_argument("--item", help="the work item the question is about")
+            s.add_argument("--context", help="one or two plain sentences: what it is about")
     sub.add_parser("list", help="print the numbered block for Ola")
     a = sub.add_parser("answer", help="close question N with Ola's words, verbatim")
-    a.add_argument("n", type=int)
+    a.add_argument("n", help="the number the last list printed, or the stored id as q7")
     a.add_argument("words")
     d = sub.add_parser("drop", help="close question N without an answer")
-    d.add_argument("n", type=int)
+    d.add_argument("n", help="the number the last list printed, or the stored id as q7")
     d.add_argument("reason")
     return p
 

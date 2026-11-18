@@ -86,6 +86,8 @@ def _answered(args: argparse.Namespace, store: Path) -> str:
         raise RefusedError(f"there is no question {qid}")
     if record["state"] != "answered":
         raise RefusedError(f"question {qid} is not answered")
+    if not record.get("context"):
+        raise RefusedError(f"question {qid} has no context; ask again with --context")
     if record["words"].removesuffix(RECOMMENDED).strip(" .!").casefold() not in AGREE:
         raise RefusedError(f'Ola did not agree to question {qid}: "{record["words"]}"')
     if " ".join(args.text.split()) not in " ".join(record["text"].split()):
