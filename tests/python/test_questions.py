@@ -377,3 +377,52 @@ def test_a_malformed_line_is_skipped_and_counted(store: Path) -> None:
     assert [r["text"] for r in good] == ["Cache the repair?"]
     assert json.loads(store.read_text().splitlines()[0])["id"] == "q1"
     assert numbered(run(store, "list"))[0].startswith("1. Cache the repair?")
+
+
+# ---------------------------------------------------------------- 14. context and stored ids
+
+CONTEXT = "The mesher's new tolerance rule moved the triangle count by a tenth."
+
+
+def test_context_is_stored_and_listed_right_before_the_question(store: Path) -> None:
+    ask(store, "Keep the tolerance rule?", "--context", CONTEXT)
+    assert newest(store, "Keep the tolerance rule?")["context"] == CONTEXT
+    assert numbered(run(store, "list")) == [f"1. {CONTEXT} Keep the tolerance rule? Default: no."]
+
+
+def test_context_is_checked_for_plain_words_and_length(store: Path) -> None:
+    hashed = refused(store, "add", "Keep it?", "--default", "no", "--context", "Run at 3c09bc87.")
+    assert "commit hash" in hashed
+    plain = refused(store, "add", "Keep it?", "--default", "no", "--context", "An LOD.")
+    assert "abbreviation" in plain
+    ask(store, "Keep it?", "--context", "An LOD rose.", "--term", "LOD")
+    long = "word " * 81
+    assert "context" in refused(store, "add", "Drop it?", "--default", "no", "--context", long)
+
+
+@pytest.mark.parametrize(
+    "text", ["Change ledger line 4 to the new wording?", "Add this ledger line on tolerance?"]
+)
+def test_a_ledger_question_needs_context(store: Path, text: str) -> None:
+    assert "context" in refused(store, "add", text, "--default", "no")
+    ask(store, text, "--context", CONTEXT)
+
+
+def test_an_old_record_without_context_lists_answers_and_drops(store: Path) -> None:
+    old: dict[str, Any] = {"id": "q1", "kind": "question", "text": "Old one?", "default": "no",
+                           "choices": [], "item": None, "source": "main", "state": "open",
+                           "words": None, "at": NOW.isoformat()}  # fmt: skip
+    store.write_text(json.dumps(old) + "\n" + json.dumps({**old, "id": "q2"}) + "\n")
+    assert numbered(run(store, "list"))[0] == "1. Old one? Default: no."
+    run(store, "answer", "1", "yes")
+    run(store, "drop", "q2", "gone")
+    assert [r["state"] for r in records(store)] == ["answered", "dropped"]
+
+
+def test_answer_and_drop_take_the_stored_id(store: Path) -> None:
+    ask(store, "Which unit for heights?")
+    ask(store, "Which colour for rivers?")
+    run(store, "drop", "q2", "not needed")
+    run(store, "answer", "q1", "metre")
+    assert [r["state"] for r in records(store)] == ["answered", "dropped"]
+    assert "no open question q1" in refused(store, "drop", "q1", "again")
