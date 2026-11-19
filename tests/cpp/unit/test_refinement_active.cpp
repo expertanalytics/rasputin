@@ -100,8 +100,9 @@ TEST_CASE("rebuild_active: every slot touched and every slot skipped", "[refinem
 
 TEST_CASE("rebuild_active: touched holds values other than 1", "[refinement][active]") {
     // refine writes 1, but resize(.., 1) and a char's truth are the contract:
-    // any nonzero entry is touched.
-    std::vector<char> touched{0, 2, 0, -1, 1};
+    // any nonzero entry is touched. All bits set, written so it compiles
+    // whether char is signed (x86) or unsigned (ARM Linux).
+    std::vector<char> touched{0, 2, 0, static_cast<char>(-1), 1};
     REQUIRE(rebuilt(touched, {2}) == std::vector<std::uint32_t>{1, 2, 3, 4});
 }
 
