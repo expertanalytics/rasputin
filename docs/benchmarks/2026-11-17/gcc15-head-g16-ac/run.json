@@ -1,0 +1,513 @@
+{
+ "label": "gcc15-head-g16-ac",
+ "started": "2026-11-17T17:57:20.378900+01:00",
+ "tree": {
+  "commit": "d029ffbf540cc47c7100800be697b46461bd45b5",
+  "dirty": false
+ },
+ "bench_blob": "16ad2ff52bdef716a23214fa4c877a497a2bef6c",
+ "child_argv": [
+  "/Users/skavhaug/projects/rasputin/.claude/worktrees/gcc15-predicates/.venv/bin/python",
+  "/Users/skavhaug/projects/rasputin/.claude/worktrees/gcc15-predicates/tools/bench.py",
+  "_child",
+  "--pkg",
+  "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/250e6b2b-1a4e-4bd4-83ef-16e96f9c1134/scratchpad/head-g16/build-bench/pkg",
+  "--threads",
+  "<N>",
+  "--",
+  "mesh",
+  "--dem",
+  "/Users/skavhaug/projects/rasputin/.claude/worktrees/gcc15-predicates/tests/fixtures/dem_archive/7908_3_10m_z33.tif",
+  "--tolerance",
+  "1",
+  "--out",
+  "<path>",
+  "--binary"
+ ],
+ "build": {
+  "no_build": false,
+  "type": "Release",
+  "cxx_flags_release": "-O3 -DNDEBUG",
+  "compiler": "GNU 16.2.0",
+  "so_sha256": "2de956026b0aa28f23ea699d1109420b87919cd646b27a0d2459f643efb35272"
+ },
+ "machine": {
+  "cpu_brand": "Apple M1 Max",
+  "p_cores": 8,
+  "e_cores": 2,
+  "memory_bytes": 34359738368,
+  "system": "macOS",
+  "os_version": "27.0.1",
+  "python": "3.14.7",
+  "numpy": "2.5.5",
+  "shapely": "2.2.0",
+  "geos": "3.14.1",
+  "pyproj": "3.8.0",
+  "proj": "9.8.1"
+ },
+ "power": {
+  "state": "ac",
+  "percent": 81,
+  "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=23658595)\t81%; charging; 1:11 remaining present: true\n--- after ---\nNow drawing from 'AC Power'\n -InternalBattery-0 (id=23658595)\t81%; charging; 1:11 remaining present: true\n"
+ },
+ "inputs": {
+  "dem": "/Users/skavhaug/projects/rasputin/.claude/worktrees/gcc15-predicates/tests/fixtures/dem_archive/7908_3_10m_z33.tif",
+  "dem_sha256": "aabd0cbc28471ce8593e4c278381811bec3fbf4e1194058b3b4888d00c3af575",
+  "domains": [
+   {
+    "name": "tile",
+    "path": null,
+    "sha256": null
+   },
+   {
+    "name": "quarter",
+    "path": "/Users/skavhaug/projects/rasputin/.claude/worktrees/gcc15-predicates/docs/benchmarks/2026-09-26/quarter.geojson",
+    "sha256": "b7f7bbe96848383c77863ce29ee28c45bce087601a1738ee82ddb4ffb8279d1e"
+   }
+  ],
+  "tolerance": 1.0,
+  "extra_args": []
+ },
+ "samples": [
+  {
+   "domain": "tile",
+   "threads": 0,
+   "repeat": 0,
+   "refine_s": 0.22977683297358453,
+   "app_s": 0.524376624962315,
+   "proc_s": 1.243581874994561,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "repeat": 0,
+   "refine_s": 0.5834888329263777,
+   "app_s": 0.8910384168848395,
+   "proc_s": 1.1759177499916404,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "repeat": 0,
+   "refine_s": 0.23668874986469746,
+   "app_s": 0.5384683751035482,
+   "proc_s": 0.8341132919304073,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 0,
+   "repeat": 1,
+   "refine_s": 0.22932945913635194,
+   "app_s": 0.5285632500890642,
+   "proc_s": 0.8101613339968026,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "repeat": 1,
+   "refine_s": 0.5998405001591891,
+   "app_s": 0.9009351660497487,
+   "proc_s": 1.1868573750834912,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "repeat": 1,
+   "refine_s": 0.23216879204846919,
+   "app_s": 0.5331267088185996,
+   "proc_s": 0.8196955840103328,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 0,
+   "repeat": 2,
+   "refine_s": 0.22955708298832178,
+   "app_s": 0.5383608331903815,
+   "proc_s": 0.8201319170184433,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "repeat": 2,
+   "refine_s": 0.5894574171397835,
+   "app_s": 0.8920054999180138,
+   "proc_s": 1.1798452499788254,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "repeat": 2,
+   "refine_s": 0.23659054189920425,
+   "app_s": 0.5573891249950975,
+   "proc_s": 0.841976874973625,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 0,
+   "repeat": 3,
+   "refine_s": 0.22688229195773602,
+   "app_s": 0.5252241659909487,
+   "proc_s": 0.8219369170255959,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "repeat": 3,
+   "refine_s": 0.591823915950954,
+   "app_s": 0.9029307079035789,
+   "proc_s": 1.1832512498367578,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "repeat": 3,
+   "refine_s": 0.2351752920076251,
+   "app_s": 0.5355080410372466,
+   "proc_s": 0.8189199580810964,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 0,
+   "repeat": 4,
+   "refine_s": 0.2298000839073211,
+   "app_s": 0.5275495410896838,
+   "proc_s": 0.8032780420035124,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "repeat": 4,
+   "refine_s": 0.5770350829698145,
+   "app_s": 0.8857344170100987,
+   "proc_s": 1.179217791184783,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "repeat": 4,
+   "refine_s": 0.2313522920012474,
+   "app_s": 0.5325813749805093,
+   "proc_s": 0.8153261670377105,
+   "max_error": 0.9999759197235107,
+   "rounds": 53,
+   "inserted": 219837,
+   "flips": 445675
+  },
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "repeat": 0,
+   "refine_s": 0.21777683310210705,
+   "app_s": 0.5067919581197202,
+   "proc_s": 0.7970269999932498,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "repeat": 0,
+   "refine_s": 0.6318864158820361,
+   "app_s": 0.9205990829505026,
+   "proc_s": 1.2184647910762578,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "repeat": 0,
+   "refine_s": 0.21415487513877451,
+   "app_s": 0.47059062495827675,
+   "proc_s": 0.7621953331399709,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "repeat": 1,
+   "refine_s": 0.20945537509396672,
+   "app_s": 0.4563837500754744,
+   "proc_s": 0.7311786250211298,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "repeat": 1,
+   "refine_s": 0.545196333900094,
+   "app_s": 0.7993671658914536,
+   "proc_s": 1.0743733749259263,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "repeat": 1,
+   "refine_s": 0.210206083022058,
+   "app_s": 0.45830116607248783,
+   "proc_s": 0.7377595421858132,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "repeat": 2,
+   "refine_s": 0.20755024999380112,
+   "app_s": 0.46261449996382,
+   "proc_s": 0.7430996249895543,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "repeat": 2,
+   "refine_s": 0.5323163329157978,
+   "app_s": 0.7868065829388797,
+   "proc_s": 1.086283708922565,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "repeat": 2,
+   "refine_s": 0.2137521670665592,
+   "app_s": 0.47096124989911914,
+   "proc_s": 0.7578928750008345,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "repeat": 3,
+   "refine_s": 0.21306741703301668,
+   "app_s": 0.4818019170779735,
+   "proc_s": 0.774797165999189,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "repeat": 3,
+   "refine_s": 0.5239618748892099,
+   "app_s": 0.7786857918836176,
+   "proc_s": 1.060174125013873,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "repeat": 3,
+   "refine_s": 0.2125312089920044,
+   "app_s": 0.4854593330528587,
+   "proc_s": 0.7714434592053294,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "repeat": 4,
+   "refine_s": 0.21176154189743102,
+   "app_s": 0.468361624982208,
+   "proc_s": 0.7771412078291178,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "repeat": 4,
+   "refine_s": 0.5622098329477012,
+   "app_s": 0.8193717498797923,
+   "proc_s": 1.1090328749269247,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "repeat": 4,
+   "refine_s": 0.21141141606494784,
+   "app_s": 0.46791895804926753,
+   "proc_s": 0.7585016251541674,
+   "max_error": 0.9999796549479072,
+   "rounds": 41,
+   "inserted": 213464,
+   "flips": 445657
+  }
+ ],
+ "stats": [
+  {
+   "domain": "quarter",
+   "threads": 0,
+   "n": 5,
+   "median": 0.21176154189743102,
+   "min": 0.20755024999380112,
+   "max": 0.21777683310210705
+  },
+  {
+   "domain": "quarter",
+   "threads": 1,
+   "n": 5,
+   "median": 0.545196333900094,
+   "min": 0.5239618748892099,
+   "max": 0.6318864158820361
+  },
+  {
+   "domain": "quarter",
+   "threads": 8,
+   "n": 5,
+   "median": 0.2125312089920044,
+   "min": 0.210206083022058,
+   "max": 0.21415487513877451
+  },
+  {
+   "domain": "tile",
+   "threads": 0,
+   "n": 5,
+   "median": 0.22955708298832178,
+   "min": 0.22688229195773602,
+   "max": 0.2298000839073211
+  },
+  {
+   "domain": "tile",
+   "threads": 1,
+   "n": 5,
+   "median": 0.5894574171397835,
+   "min": 0.5770350829698145,
+   "max": 0.5998405001591891
+  },
+  {
+   "domain": "tile",
+   "threads": 8,
+   "n": 5,
+   "median": 0.2351752920076251,
+   "min": 0.2313522920012474,
+   "max": 0.23668874986469746
+  }
+ ],
+ "quality": {
+  "tile": {
+   "worst_angle": 0.6295986084102668,
+   "angle_median": 45.0,
+   "share_under_1": 2.1538262723728703e-6,
+   "max_degree": 74,
+   "within_tolerance": true,
+   "delaunay_checked": 692056,
+   "delaunay_ambiguous": 94469,
+   "delaunay_violations": 0,
+   "mesh_sha256": "11741a81adfa17b34a1ea56875ec9e791414d17625eb1c58305e7c0cf10e005c"
+  },
+  "quarter": {
+   "worst_angle": 0.3955267116350698,
+   "angle_median": 45.0,
+   "share_under_1": 0.000028023109724486125,
+   "max_degree": 18,
+   "within_tolerance": true,
+   "delaunay_checked": 641792,
+   "delaunay_ambiguous": 80136,
+   "delaunay_violations": 0,
+   "mesh_sha256": "a60fb597b5b738268a3bd27730989392ee86fb030fe060b78fd3a0bcdbb60a34"
+  }
+ },
+ "accept_quality": false,
+ "threshold_pct": 5.0,
+ "verdict": [
+  "ACCEPTED"
+ ],
+ "hardening": "libstdc++ assertions"
+}

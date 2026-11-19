@@ -48,7 +48,7 @@ replaces ``--edges-max-shift``" and section 9, tests 14 to 16):
 help and record sentence as section 6 words them; the start angle is 15 when
 the land-cover stage ran with the band above 0 and no ``--start-min-angle``
 was given, else 25; band 0 is today's mesh bit for bit (``BAND_0_TODAY``, one
-digest per platform, and the simplifier never called).
+digest for every platform, and the simplifier never called).
 PINNED for increment 32: "the land-cover stage ran" is a ``--land-cover``
 file with ``--edges`` naming its classes (``corine``); a run of lines alone
 (``gallery``, ``--lines road=``) keeps 25 at any band.
@@ -76,9 +76,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import platform
 import re
-import sys
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -104,22 +102,12 @@ BAND_DEFAULT = 50.0  # increment 32, section 6: half CORINE's positional accurac
 #: Increment 32, test 14: SHA-256 of the points (float64, little-endian, (N, 3))
 #: then the triangles (int64, little-endian, (T, 3)) read back from the .vtk of
 #: ``run`` with ``--features corine --features-rules corine --edges-max-shift
-#: 0``, one per (``sys.platform``, ``platform.machine()``). A recorded digest
-#: pins a platform as well as a behaviour (``test_cli_mesh_domain_crs.py``'s
-#: preamble): the same shapely 2.2.0 (GEOS 3.14.1) and numpy 2.5.3 give this
-#: mesh different last bits on the two architectures, and each architecture
-#: is consistent with itself.
-#: - darwin/arm64: computed by @tester with that command at b39426c0, before any
-#:   increment 32 change (325 points, 586 triangles, start angle 25), three runs
-#:   alike. This is the digest the increment file's test 14 names.
-#: - linux/x86_64: read from CI run 37914928683 (ubuntu-latest, PR #222 at
-#:   d5b2ba4c), the same on Python 3.12, 3.13 and 3.14. No Linux run of
-#:   b39426c0 exists, so on Linux the pin guards the band-0 mesh against change
-#:   from d5b2ba4c on, not against the mesh before increment 32.
-BAND_0_TODAY = {
-    ("darwin", "arm64"): "29963a44f6fb48f8c1d2bd64671bd007a15e3031c1d33a564ae41371dc2efca3",
-    ("linux", "x86_64"): "9cd16850288f77e6ef8aa32bfa3456f2638d3c97554ffd9b90030959ea10a635",
-}
+#: 0``. Read from CI run 37914928683 (ubuntu-latest, PR #222 at d5b2ba4c), the
+#: same on Python 3.12, 3.13 and 3.14, so the pin guards the band-0 mesh
+#: against change from d5b2ba4c on. Since the core builds with
+#: ``-ffp-contract=off`` macOS arm64 gives this mesh too; its own
+#: digest before that, 29963a44, came from fused multiply-adds.
+BAND_0_TODAY = "9cd16850288f77e6ef8aa32bfa3456f2638d3c97554ffd9b90030959ea10a635"
 #: Section 15.4's wording (the fix moved the band after the outline rule; the
 #: section 6 wording this replaced said "repaired, clipped border").
 BAND_HELP = (
@@ -407,15 +395,9 @@ class TestTheBand:
         self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
     ) -> None:
         """The mesh at band 0 (points and triangles read back from the .vtk)
-        is the one recorded for this platform in ``BAND_0_TODAY``. On macOS
-        arm64 that is b39426c0's mesh, before increment 32, so any change to
-        the repair, merge, outline or refinement steps as band 0 runs them is
-        caught here; on Linux x86_64 the pin holds the band-0 mesh fixed from
-        PR #222 on. A platform with no recorded digest is skipped, naming the
-        key to record."""
-        key = (sys.platform, platform.machine())
-        if key not in BAND_0_TODAY:
-            pytest.skip(f"no band-0 digest recorded for {key}; record one with mesh_digest")
+        is the one recorded in ``BAND_0_TODAY``, so any change to the repair,
+        merge, outline or refinement steps as band 0 runs them is caught
+        here."""
         run(
             tmp_path,
             bumpy,
@@ -424,7 +406,7 @@ class TestTheBand:
             "--edges-max-shift",
             "0",
         )
-        assert mesh_digest(tmp_path / "x.vtk") == BAND_0_TODAY[key]
+        assert mesh_digest(tmp_path / "x.vtk") == BAND_0_TODAY
 
     @pytest.mark.parametrize(
         ("features", "extra", "angle"),

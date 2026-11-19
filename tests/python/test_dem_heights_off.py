@@ -6,17 +6,17 @@ land-cover overlap keeps its bytes after the shared clip is refactored.
 before the height shares), in a worktree whose code was that commit's, by
 the functions below, three runs alike. The `.gpkg` digest is
 `height_fixtures.gpkg_digest`'s, which leaves out the run rows the host
-fills (`command`, `threads`, `rasputin_version`).
+fills (`command`, `threads`, `rasputin_version`). The cut, Velhas and
+`class_areas` digests were re-recorded the same way when the core began
+building with `-ffp-contract=off`; the steps digests did not move.
 
 A recorded digest pins a platform as well as a behaviour: every digest here
 is keyed by (`sys.platform`, `platform.machine()`) and a platform without
 one skips, saying so, as `R11_SHA256` in `test_cli_catchment_geographic.py`
 does. The design asks for `class_areas`'s arrays on every platform; they are
-keyed too, because the clip's crossings (`a + t (b - a)`) may be contracted
-to a fused multiply-add by one compiler and not by another, which moves the
-last bit. Where they skip, invariant 6 rests on the land-cover suite, which
-runs everywhere, and invariant 1 on `TestOffWritesNothing` in
-`test_cli_mesh_dem_heights.py`.
+keyed too, because they were recorded on one platform only. Where they
+skip, invariant 6 rests on the land-cover suite, which runs everywhere,
+and invariant 1 on `TestOffWritesNothing` in `test_cli_mesh_dem_heights.py`.
 """
 
 from __future__ import annotations
@@ -51,15 +51,15 @@ STEPS_DIGESTS = {
 #: `square_scene` (test 10), `--pieces 4`, no flag: each piece file.
 CUT_DIGESTS = {
     DARWIN_ARM64: {
-        "0-0-0.vtk": "cab3881f469ebfce7530b37645b94b9948d54065f235f816ae1914d37adf93bd",
-        "0-1-0.vtk": "07293155e6f8706e5144b6ec5c7e8caa326d8258671cce53859561d741f08eae",
-        "1-0-0.vtk": "a0a249fe52198f453571547f538bdb4baca427e7e1308a73ee9e732e5ecb3782",
-        "1-1-0.vtk": "402a073f29aca1f42c417b3b11339a4bae33014656bac3b73047ee891653494f",
+        "0-0-0.vtk": "a26b997df80411d4f5fa9937743e8f783eadf07018f95ddb96c11c48267b294b",
+        "0-1-0.vtk": "f0ac2466c2a1661308fda0a5f5bf1cb2dc127a852228ad568354efade0c48488",
+        "1-0-0.vtk": "8a6df047a0c9c41f7155a37b3c8c47002ba2ec483ca619719e0947a6e4a838eb",
+        "1-1-0.vtk": "b010d0bdca1e158881102c5285fa8195886fff41dfbe02408fe188e05cbb5ca2",
     },
 }
 #: Velhas (test 11), `--out-crs EPSG:31983 --tolerance 5`, no flag.
 VELHAS_DIGEST = {
-    DARWIN_ARM64: "3f4662d475cc3a5eacd09c1247ddf14eaf297ec4e99e1011e33ce21e609bff93",
+    DARWIN_ARM64: "21304ae625b979716795105a297bcc09a316aeecd75fc57677a47c39d44a8e52",
 }
 #: `class_areas` on `test_land_cover_overlap.py`'s `TestThreads` input, one
 #: thread: the offsets, classes and areas arrays' bytes.
@@ -67,7 +67,7 @@ CLASS_AREAS_DIGESTS = {
     DARWIN_ARM64: (
         "684020a1dcffa7c5a26809bf69a63da102d344db15387c24ee5d25298b4e545b",
         "86f38dd12bdfac6fc13dbe95ac0c63ed1047b4405b3f9532c72b81e930036cd7",
-        "d94d0ec2e95490e9e2fdbaf56de8eb1235bdc12081e907ddfd688ef4edb26c6f",
+        "95d1ff77edd298e6263d345956513544b96911db9d436f06e4513394c2e0cb46",
     ),
 }
 #: `TestThreads`' input, restated: three seeds of 400 points on a 20 x 20 grid.
