@@ -341,7 +341,7 @@ class TestR2TheRealPositionals:
         tool = derived(app)[name]
         argv, params = parsed_back(tool, {positional: "--refresh", **required})
         assert argv[-2:] == ["--", "--refresh"], argv
-        assert params[positional] == "--refresh"
+        assert str(params[positional]) == "--refresh"  # Typer >= 0.29 parses a Path
         context = tool.command.make_context(argv[0], argv[1:])
         for param in tool.command.params:
             if param.param_type_name == "option" and param.name not in required:
@@ -640,7 +640,7 @@ class TestT8bWritesOnTheRealApp:
             (name, p.name)
             for name, d in derived(app).items()
             for p in d.command.params
-            if getattr(p.type, "writable", False)
+            if getattr(mcp_schema._type(p), "writable", False)
         }
         assert marked == WRITABLE
 
@@ -648,7 +648,8 @@ class TestT8bWritesOnTheRealApp:
         mesh = click_command(app, "mesh")
         for name in ("stats", "record_path"):
             (param,) = [p for p in mesh.params if p.name == name]
-            assert param.type.writable and param.type.allow_dash, name
+            kind = mcp_schema._type(param)
+            assert kind.writable and kind.allow_dash, name
 
     def test_no_tool_has_an_out_parent_argument(self) -> None:
         for name, d in derived(app).items():

@@ -15,7 +15,8 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 from pathlib import PurePath
-from typing import Any, Literal
+from types import SimpleNamespace
+from typing import Any, Literal, get_args, get_origin
 
 import mcp_types as types
 import typer
@@ -23,8 +24,16 @@ from pydantic import BaseModel, ConfigDict, Field, create_model
 
 #: The command that is the server itself: not a tool.
 SERVER_COMMAND = "mcp"
-#: click's type names as annotations; a path is a string on the server's machine.
-SCALARS: dict[str, type] = {"str": str, "int": int, "float": float, "boolean": bool, "path": str}
+#: click's type names (Typer >= 0.29: the annotation's) as annotations; a path is a
+#: string on the server's machine.
+SCALARS: dict[str, type] = {
+    "str": str,
+    "int": int,
+    "float": float,
+    "boolean": bool,
+    "bool": bool,
+    "path": str,
+}
 #: MCP's tool annotations (hints to the client) by tool name: `version` only
 #: reads, the fetches reach the network; every tool is non-destructive.
 READ_ONLY = frozenset({"version", "sources"})
@@ -56,6 +65,36 @@ class RunResult(BaseModel):
     downloads: list[Download] | None = None
 
 
+def _type(param: Any) -> Any:
+    """The parameter's click type, or, on Typer >= 0.29 (whose options have no
+    ``.type``), one rebuilt from Typer's type descriptor with the attributes read
+    here: ``name``, ``choices``, ``types``, ``min``, ``max``, ``writable``, ``allow_dash``."""
+    if hasattr(param, "type"):
+        return param.type
+    found = param.type_descriptor
+    choices = [c.value if isinstance(c, enum.Enum) else c for c in found.choices or ()]
+    return _described(found.annotation, found.parameter_info, choices or None)
+
+
+def _described(annotation: Any, info: Any, choices: list[Any] | None = None) -> Any:
+    if get_origin(annotation) is list:
+        annotation = get_args(annotation)[0]
+    shown = SimpleNamespace(
+        name=getattr(annotation, "__name__", "str"),
+        min=info.min,
+        max=info.max,
+        writable=info.writable,
+        allow_dash=info.allow_dash,
+    )
+    if isinstance(annotation, type) and issubclass(annotation, PurePath):
+        shown.name = "path"
+    if choices is not None:
+        shown.choices = choices
+    if get_origin(annotation) is tuple:
+        shown.types = [_described(a, info) for a in get_args(annotation)]
+    return shown
+
+
 def _annotation(param_type: Any) -> tuple[Any, dict[str, Any]]:
     """A click parameter type as an annotation and the `Field` constraints it implies."""
     if hasattr(param_type, "choices"):
@@ -78,7 +117,7 @@ def _fields(command: Any) -> dict[str, Any]:
     """`create_model` field definitions, one per click parameter, in the command's order."""
     fields: dict[str, Any] = {}
     for param in command.params:
-        annotation, constraints = _annotation(param.type)
+        annotation, constraints = _annotation(_type(param))
         if _many(param):
             annotation = list[annotation]  # type: ignore[valid-type]
         if param.required:
@@ -152,10 +191,10 @@ class DerivedCommand:
         found = []
         for param in self.command.params:
             value = getattr(arguments, param.name)
-            if not getattr(param.type, "writable", False) or value is None:
+            if not getattr(_type(param), "writable", False) or value is None:
                 continue
             for item in value if _many(param) else [value]:
-                if not (item == "-" and param.type.allow_dash):
+                if not (item == "-" and _type(param).allow_dash):
                     found.append((param.name, str(item)))
         return found
 
@@ -166,7 +205,7 @@ class DerivedCommand:
         found: list[tuple[str, str]] = []
         for param in self.command.params:
             value = getattr(arguments, param.name)
-            if getattr(param.type, "writable", False) or value is None:
+            if getattr(_type(param), "writable", False) or value is None:
                 continue
             for item in value if _many(param) else [value]:
                 parts = item if isinstance(item, tuple) else (item,)
