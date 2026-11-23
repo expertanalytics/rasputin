@@ -262,7 +262,7 @@ def repo(tmp_path: Path) -> Path:
 
 
 def test_every_hook_script_is_covered_by_path() -> None:
-    """The eight hooks under `.claude/hooks/` are all wired as bare paths.
+    """The nine hooks under `.claude/hooks/` are all wired as bare paths.
 
     Without this, a hook rewired with an interpreter prefix would drop out of
     the by-path test below unnoticed.
@@ -277,6 +277,7 @@ def test_every_hook_script_is_covered_by_path() -> None:
         "record_review.py",
         "notify_prompt.py",
         "guard_kill.py",
+        "message_lint.py",
     }
 
 
