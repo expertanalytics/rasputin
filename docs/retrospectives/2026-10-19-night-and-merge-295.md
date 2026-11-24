@@ -89,8 +89,8 @@ here as the correction.
 | PR | What | Steps, in order? | Size | CI | Out of role |
 |---|---|---|---|---|---|
 | #295 | h24 PR A: guard and push-grant fixes, items 1, 2, 5, 14, 15, 16 | Design 10-18 07:20 (`808782fd`); red, green, code review 1 changes requested; items 14 to 16 added with design rounds 3 to 6; green 2 `942b7c23`; item 16 red `6802e960`; master merge `dca72bce`; **pushed at 07:04** (transcript line 44638); code review 2 changes requested at 07:17 on that head (a regression: a shell's heredoc body not read); revision, red, green, round 3 approved on `586e2721`. Out of order: see 2.1. | 115 net lines (`tools/count_loc.py aee5a948^1 aee5a948`) | Green first time, PR 12 min; merged 08:54:35 | Item 16's green (`2ce39e3c`, two lines of `.claude/settings.json`) by the main session, on Ola's "yes, add the onFailure lines and push" (05:57:08). A settings edit needs Ola's own yes at the prompt whoever writes it, so this is a reasonable exception; it is still `@developer`'s step done by the dispatcher. |
-| private #12 | 70, snow-core bounds | Design, review, red, green, code review, `@perf` (commits `7bd751b6` to `d0249552`) | prose and Python, private | Merged 05:48:37, **after** its check passed at 05:43:16 | None |
-| private #13 | 61, routing to the Bygdin shore | As above, plus a private-master merge `9d38e7c5` after GitHub reported a conflict that local `merge-tree` did not (two merge bases, line 288) | private | Check 06:45 to 06:55, merged 07:01:29 | None |
+| private #12 | | Design, review, red, green, code review, `@perf` (commits `7bd751b6` to `d0249552`) | prose and Python, private | Merged 05:48:37, **after** its check passed at 05:43:16 | None |
+| private #13 | | As above, plus a private-master merge `9d38e7c5` after GitHub reported a conflict that local `merge-tree` did not (two merge bases, line 288) | private | Check 06:45 to 06:55, merged 07:01:29 | None |
 
 ### 2.1 The #295 push came before the code review
 
@@ -111,7 +111,7 @@ required check `Package (ubuntu-latest, core pinned)`, `enforce_admins`
 true. Both PRs waited for their check (`gh pr checks … --watch`, lines
 43526, 43642), so the lesson of #11 held. The macOS job is not required:
 private master's nightly failed on it at 03:53 (run 39196784245,
-`test_snow_lateral.py::TestBinding::test_the_gil_is_released`, "only 12
+a private test of GIL release, "only 12
 ticks in 0.126s: it holds the GIL"), while the 02:38 run on the same
 commit passed. A timing test on a shared runner: flaky, not a break.
 

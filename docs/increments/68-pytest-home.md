@@ -131,9 +131,9 @@ after collection, so a read at import or collection time would escape it.
 Moving `HOME` for the whole session is safe on `9c80b7de`. With `HOME` an
 empty directory and `XDG_CONFIG_HOME`, `XDG_CACHE_HOME` and `RASPUTIN_DATA`
 unset, `pytest -m harness tests/python` gave 2452 passed, and the product
-tests gave one failure, `test_open_core.py::test_no_private_module_imports[tin_engine.snow]`.
+tests gave one failure, one case of `test_open_core.py`'s absence test.
 That one also fails with the real `HOME`: the main checkout, whose venv ran
-the probe, holds a leftover `src_python/tin_engine/snow/` with only
+the probe, holds a leftover folder of the moved code with only
 `__pycache__` in it. No test wrote anything into the empty `HOME`.
 
 A test that needs its own values keeps setting them with `monkeypatch`, as

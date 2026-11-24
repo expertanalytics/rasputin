@@ -1,6 +1,6 @@
 """`io.geotiff_write.encode_geotiff`, read back by the core's own reader.
 
-`docs/increments/51-open-core.md`, *9.1 Public (P1 unless marked)*, T9. The
+`docs/increments/51-plugin-seam.md`, *3.1 Public tests of the seam*, T9. The
 encoder stays public while the suites that exercised it move out, so this
 round trip is what keeps it covered.
 """

@@ -2,8 +2,8 @@
 
 Status: **designed**, 2026-10-19, on `worktree-h26-away-stop` off master
 `38ff5e5f`. Short path (`docs/increments/README.md`): about 20 counted
-lines, no C++ file, no refine or mesh code. Source: the retrospective
-`docs/retrospectives/2026-10-19-d.md` (branch `worktree-retro-1019d`, PR
+lines, no C++ file, no refine or mesh code. Source: a retrospective,
+since made private (branch `worktree-retro-1019d`, PR
 #302), section 2 (1 h 45 min idle in the afternoon away window) and its
 proposal 1, which Ola said yes to on 2026-10-19 at about 20:1x UTC.
 

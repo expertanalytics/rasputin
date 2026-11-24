@@ -246,10 +246,10 @@ class TestGroupingAndOrder:
         assert info.rich_help_panel is unset, "the plugin's own command is changed"
 
     def test_a_plugin_that_names_a_panel_keeps_it(self) -> None:
-        plugin = hello_app(panel="Snow")
+        plugin = hello_app(panel="Extras")
         app = application([Plugin("fakeplug", "0.1", "hello", plugin)])
         shown = dict(panels(rendered(app)))
-        assert shown.get("Snow") == ["hello"], shown
+        assert shown.get("Extras") == ["hello"], shown
         assert "Plugins" not in shown, shown
 
 

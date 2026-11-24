@@ -64,12 +64,12 @@ Today's three amends were all on commits never pushed, and all chained:
 |---|---|---|---|
 | 05:24 | `@orchestrator` (retro-1021) | `cd … && sed … && grep … && python3 tools/check_citations.py …; git commit -q --amend --no-edit -a && git log --oneline -1` | asked; Ola was at the prompt |
 | 09:18:54 | `@orchestrator` (retro-1021c) | `cd … && python3 tools/check_citations.py … \| grep … \| tail -3 && git commit -q --amend -a --no-edit && git log … && git status …` | refused, away |
-| 09:24:35 | `@architect` (lsm-ideas-warm-rain) | `cd … && git add docs/ideas/research/… && git commit -q --amend --no-edit && git log --oneline -1 && git status --short \| head` | refused, away |
+| 09:24:35 | `@architect` (a private branch) | `cd … && git add docs/ideas/research/… && git commit -q --amend --no-edit && git log --oneline -1 && git status --short \| head` | refused, away |
 
 Sources: `<git-common-dir>/harness/queue-2026-10-21.jsonl` (the two
 refusals); the agents' transcripts for the 05:24 ask. Unpushed: the first
 grant push of `worktree-retro-1021c` was at 09:23:16 and of
-`lsm-ideas-warm-rain` at 09:31:24 (`grants-used.jsonl`), both after the
+a private branch at 09:31:24 (`grants-used.jsonl`), both after the
 refusals. Probed with the hook itself on a scratch repository with one
 unpushed commit: `git -C <abs> commit --amend --no-edit` passes (no output),
 `cd <abs> && git commit --amend --no-edit` asks.

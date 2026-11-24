@@ -37,8 +37,8 @@ Tooling; no novelty claimed.
   configuration/editable, read 2026-10-17): the default redirect mode "uses a
   custom redirecting finder to combine the static CMake install dir with the
   original source code"; "Older interpreters emit only `.pth` files" (3.15
-  adds `.start` files). Fix 3 rests on both halves: the compiled `_lsm` sits
-  in site-packages, and the `.pth` file adds the worktree's `src` to
+  adds `.start` files). Fix 3 rests on both halves: the private package's compiled
+  extension sits in site-packages, and the `.pth` file adds the worktree's `src` to
   `sys.path` (section 6.1).
 - Python, `site` module: a `.pth` line that is a path is appended to
   `sys.path`; `sitecustomize` is imported after the `.pth` files are
@@ -72,7 +72,7 @@ formatter-clean"; "After-commit hook: keep the cause when two faults meet";
 |---|---|---|
 | 1 | The three granted forms for the private repository, and the rule that a branch goes only to its own repository | `tools/push_grant.py`, `tools/away.py` |
 | 2 | The after-commit hook: no gates on a tree with unmerged paths; a gate whose script is absent is skipped with one line | `.claude/hooks/gates_after_commit.py` |
-| 3 | `tools/scratch_copy.py` for the private layout: `src/`, the `_lsm` extension, the `.pth` path entry | `tools/scratch_copy.py` |
+| 3 | `tools/scratch_copy.py` for the private layout: its source directory, its extension, the `.pth` path entry | `tools/scratch_copy.py` |
 
 Not in scope: `guard_push.py` (its reasons for the new forms are already
 `PUSH` and `PR`, which `judge` accepts; checked by reading `publishes()` in
@@ -96,7 +96,7 @@ own copy of the harness (section 9).
   keyed by sha only. The common dir is shared by every worktree. What is
   wrong for a private branch is the walk, not the record: `review_of` walks
   `refs/remotes/origin/master..<head>` and `changes` accepts only merges of
-  `origin/master`. For `lsm-melt-out`, `origin/master..` holds 94 commits and
+  `origin/master`. For a private branch, `origin/master..` holds 94 commits and
   `private/master..` holds 1.
 - `gh api repos/expertanalytics/rasputin-private/branches/master/protection`
   answers `Branch not protected` (404), and the repository has
@@ -107,8 +107,8 @@ own copy of the harness (section 9).
   one `CheckRun` with conclusion `SUCCESS`, state `OPEN`, base `master`.
 - History is shared up to the split: `git merge-base origin/master
   private/master` is `a058bb6b` (2026-10-14). `private/master` holds 93
-  private-only commits. `lsm-melt-out` and `lsm-ddd-routing` hold all 93;
-  `worktree-h22-harness-fixes` and `design-terrain-radiation` hold none.
+  private-only commits. Two private branches hold all 93;
+  `worktree-h22-harness-fixes` and an older public design branch hold none.
 
 ### 4.2 The forms
 
@@ -204,7 +204,7 @@ refused by the second sentence.
 
 Known limit, stated, not fixed: a branch forked before the split
 (`a058bb6b`) and never merged with `private/master` counts as `"origin"`
-(`design-terrain-radiation` today), so its own commits could go to origin
+(an older public design branch today), so its own commits could go to origin
 under a grant. Ola grants by name, and the guard cannot tell intent.
 
 ### 4.4 The review walk and the checks
@@ -268,7 +268,7 @@ with `tools/` and is not a file under `root`, and returns the line
 `Skipped in <root>: <script> is not in this tree.` beside the failures. Ruff
 gates are never skipped. When a tree's only lines are skips, the hook prints
 them on stdout and exits 0: a skip is not red. When there are failures too,
-the skip lines go in that tree's block. Today `lsm-melt-out/tools` lacks
+the skip lines go in that tree's block. Today a private branch's `tools/` lacks
 `check_detria_boundary.py` and has the other two scripts.
 
 A gate script the commit itself deleted is skipped the same way, exit 0.
@@ -287,13 +287,13 @@ deletion is visible at commit time too.
 The private copy of the tool (`tools/scratch_copy.py` in that worktree, the
 same code as public but for one docstring line) made a copy, and from it:
 
-- `rasputin_lsm.__file__` was `.../worktrees/<branch>/src/rasputin_lsm/__init__.py`:
+- The private package's `__file__` was under `.../worktrees/<branch>/src/`:
   the worktree's, not the copy's. The sitecustomize drops the editable
   finder, but the skbc `.pth` file's second line already put the worktree's
   `src` on `sys.path`, and the printed `PYTHONPATH` names `src_python`,
   which the private layout lacks. A mutant run there tests the worktree.
-- `import rasputin_lsm._lsm` failed: the extension is in
-  `site-packages/rasputin_lsm/` and was not copied.
+- Importing the private extension failed: it is in
+  `site-packages/` and was not copied.
 - The tool copied `site-packages/tin_engine/_core*.so` into a new
   `src_python/tin_engine/` in the copy (the core is a plain install there,
   pinned by `pyproject.toml`); harmless, since the installed package wins,
@@ -323,7 +323,7 @@ same code as public but for one docstring line) made a copy, and from it:
    live check can run the public tool on a private worktree.
 
 The prototype of rules 1 to 3, by hand on the same private branch at `cea32bad`
-into the session scratchpad: `rasputin_lsm` and `_lsm` both from the copy,
+into the session scratchpad: the private package and its extension both from the copy,
 `tin_engine` from the venv; the full suite **3374 passed, 27 skipped, 0
 failed in 434 s**.
 
@@ -418,7 +418,7 @@ No suite here is invariant-critical; no mutation round.
 
 1. `python3 -c` importing the merged `tools/scratch_copy.py` with `ROOT` set
    to an `lsm-*` worktree with a `.venv`, copy `HEAD`, run the printed
-   command: `rasputin_lsm` and `_lsm` from the copy; the suite's count beside
+   command: the private package and its extension from the copy; the suite's count beside
    section 6.2's 3374 / 27.
 2. A commit in an `lsm-*` worktree: the skip line, no red.
 3. A conflicting `git merge` in a scratchpad repository: the unmerged block,
@@ -431,7 +431,7 @@ No suite here is invariant-critical; no mutation round.
 The hooks run from the main checkout for every worktree under it, so fixes 1
 and 2 act on `lsm-*` worktrees on merge. Fix 3 does not: an agent in a
 private worktree runs that tree's own `tools/scratch_copy.py`. It reaches the
-private repository by the harness sync of `51-open-core.md` §5.3 (a private
+private repository by the harness sync (a private
 PR that checks the harness paths out of a named public commit), which
 `@orchestrator` owns.
 

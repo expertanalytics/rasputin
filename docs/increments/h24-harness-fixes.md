@@ -454,7 +454,7 @@ with no `.venv`: exit 2, the stderr line, the target not created.
 ### Item 8. The queue carries a status per item, checked before a night
 
 *Why.* At 00:33 the main session found no unblocked work, but item 1 of
-`session.md` line 24 (the private routing work) had been unblocked since
+`session.md` line 24 (private work) had been unblocked since
 #279 merged; no item on that line was marked done, parked or blocked
 (retrospective section 7.2). The window idled 3 h 15 min.
 

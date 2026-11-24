@@ -6,8 +6,7 @@ every ref of both remotes after `git fetch --all`; `ls` in every worktree).
 
 ## 1. Why
 
-The private package's routing step (private increment 61, branch
-`lsm-ddd-routing`, its §4.1; Ola's yes on 2026-10-16 to DDD-style routing)
+The private package (private increment 61; Ola's yes on 2026-10-16)
 needs each DEM node's receiver and drained count. The core computes both, but
 a plugin may import only `tin_engine.plugin_api`, which lacks them.
 

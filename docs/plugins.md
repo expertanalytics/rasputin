@@ -211,5 +211,5 @@ scalars cross between two extension modules. With a tag of your own, your
 view is a different C++ type from rasputin's, so pybind11 refuses one where
 the other is expected with a `TypeError`, instead of accepting an object whose
 layout another module's build decided. The full reasoning is in
-`docs/increments/51-open-core.md`, *4.3 The raster across two extension
+`docs/increments/51-plugin-seam.md`, *2.3 The raster across two extension
 modules*.

@@ -48,9 +48,8 @@ Test readers: `tests/python/test_dem_input.py:127,136,144` and
 One more test line builds the pair: `tests/python/test_dem_input_domain.py:671`,
 whose stand-in `repository_for` returns `(InMemory(tiles), "memory")`.
 
-Outside the package: the private plugin `rasputin-lsm` calls
-`repository_for(paths)[0]` once (its module `rasputin_lsm.cli`, line 117,
-on `private/master`). It pins rasputin at a commit, so nothing breaks until the
+Outside the package: a private plugin calls it once:
+`repository_for(paths)[0]` (`rasputin-lsm`, on `private/master`). It pins rasputin at a commit, so nothing breaks until the
 pin moves; the pin bump drops the `[0]`. Dated scripts under `docs/benchmarks/`
 and `docs/increments/perf-audit-probes/` unpack the pair; they record what ran
 at their commits and are left as they are.
