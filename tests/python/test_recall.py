@@ -188,13 +188,24 @@ def test_questions_add_is_refused_until_recall_ran(tmp_path: Path) -> None:
     assert not store.exists()
 
 
-def test_outside_question_mode_no_recall_counts(where: dict) -> None:
+@pytest.mark.parametrize("extra", [[], ["--act"]])
+def test_outside_question_mode_any_recall_mark_queues_the_question(
+    where: dict, extra: list[str]
+) -> None:
+    """Queuing is not asking: with the mode off (exit clears every mark), any mark counts."""
     store = where["searches"].with_name("questions.jsonl")
     (where["searches"].parent / "harness" / "question-mode.json").unlink()
-    run(where, "sliver")
+    run(where, "sliver", now=BEGAN - timedelta(days=3))  # older than any mode start
+    assert ask(store, "Shall a sliver leave the domain?", *extra) == ["stored as q1"]
+
+
+def test_outside_question_mode_a_question_still_needs_its_recall(where: dict) -> None:
+    store = where["searches"].with_name("questions.jsonl")
+    (where["searches"].parent / "harness" / "question-mode.json").unlink()
+    run(where, "clip")
     with pytest.raises(questions.RefusedError) as caught:
         ask(store, "Shall a sliver leave the domain?")
-    assert str(caught.value) == "enter question mode first: python3 tools/questions.py mode enter"
+    assert "python3 tools/recall.py" in str(caught.value)
     assert not store.exists()
 
 

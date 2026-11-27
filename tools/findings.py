@@ -18,8 +18,8 @@ one of `AGREE`, alone or with the box's `RECOMMENDED` suffix. Each `search`
 appends its time and words to `<git-common-dir>/findings-searches.jsonl`,
 untracked; design or probe briefs (`brief.py`) refuse through `unsearched`
 until a search ran in the last hour, and `add` through `recall.unrecalled`
-until `recall.py` ran, since question mode began, on a word of the line or its
-topics.
+until `recall.py` ran on a word of the line or its topics (`recall.py` says
+since when).
 Standard library only.
 """
 
