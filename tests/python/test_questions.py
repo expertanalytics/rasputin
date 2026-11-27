@@ -29,10 +29,12 @@ NOW = datetime(2026, 10, 27, 18, 0, tzinfo=UTC)
 
 
 @pytest.fixture
-def store(tmp_path: Path) -> Path:
+def store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """The store path; its directory holds everything the tool writes, and a search
-    of the settled results run at `NOW`, which `add` requires."""
+    of the settled results run at `NOW`. The recall gate `add` keeps is opened here
+    and tested in `test_recall.py`."""
     harness_fixtures.searched(tmp_path / "common", NOW)
+    monkeypatch.setattr(questions.recall, "unrecalled", lambda *_: None)
     return tmp_path / "common" / "questions.jsonl"
 
 
@@ -426,3 +428,35 @@ def test_answer_and_drop_take_the_stored_id(store: Path) -> None:
     run(store, "answer", "q1", "metre")
     assert [r["state"] for r in records(store)] == ["answered", "dropped"]
     assert "no open question q1" in refused(store, "drop", "q1", "again")
+
+
+# ---------------------------------------------------------------- question mode
+
+
+def mode_file(store: Path) -> Path:
+    return store.parent / "harness" / "question-mode.json"
+
+
+def test_mode_is_off_until_entered_and_enter_records_its_start(store: Path) -> None:
+    assert run(store, "mode") == ["question mode: off"]
+    assert run(store, "mode", "enter") == [f"question mode: on since {NOW.isoformat()}"]
+    assert json.loads(mode_file(store).read_text()) == {"since": NOW.isoformat()}
+    assert run(store, "mode") == [f"question mode: on since {NOW.isoformat()}"]
+
+
+def test_entering_again_keeps_the_first_start(store: Path) -> None:
+    harness_fixtures.question_mode(store.parent, NOW.replace(hour=9))
+    said = run(store, "mode", "enter")
+    assert said == [f"question mode: already on since {NOW.replace(hour=9).isoformat()}"]
+    assert json.loads(mode_file(store).read_text()) == {"since": NOW.replace(hour=9).isoformat()}
+
+
+def test_exit_removes_the_state_and_the_recall_marks_only(store: Path) -> None:
+    run(store, "mode", "enter")
+    harness_fixtures.recalled(store.parent, "sliver mesh", NOW)
+    searches = store.with_name("findings-searches.jsonl")
+    kept = searches.read_text().splitlines()[0]  # the ledger search the fixture wrote
+    assert run(store, "mode", "exit") == ["question mode: off"]
+    assert not mode_file(store).exists()
+    assert searches.read_text().splitlines() == [kept]
+    assert run(store, "mode", "exit") == ["question mode: off"]  # exit when off is no error

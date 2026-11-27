@@ -29,7 +29,8 @@
       {
         "matcher": "AskUserQuestion",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_unattended.py" }
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_unattended.py" },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_discuss.py" }
         ]
       },
       {

@@ -474,6 +474,8 @@ def ask_ola(repo: Path, text: str, item: str | None = None, default: str = "wait
             *more: str) -> None:  # fmt: skip
     """Put a question for Ola through `tools/questions.py`, tied to `item` if given."""
     extra = (*more, "--item", item) if item else more
+    harness_fixtures.question_mode(repo / ".git")  # questions are asked only in question mode
+    harness_fixtures.recalled(repo / ".git", text)
     result = run_script(repo, "tools/questions.py", "", "add", text, "--default", default, *extra)
     assert result.returncode == 0, result.stderr
 

@@ -22,6 +22,7 @@ from typing import Any
 
 sys.path.append(str(Path(__file__).resolve().parent))  # appended: the stdlib wins (h16 G4)
 import findings  # beside this file
+import recall
 
 ROOT = Path(__file__).resolve().parents[1]
 #: Chosen: two lines of the recap's 120 characters.
@@ -44,6 +45,45 @@ ABBREVIATION = re.compile(r"[A-Z]{2,6}")
 
 class RefusedError(Exception):
     """A question the checks refuse, with the one plain sentence saying why."""
+
+
+def mode_path(common: Path) -> Path:
+    """Question mode's state, beside the harness's other state in the git common dir."""
+    return common / "harness" / "question-mode.json"
+
+
+def mode_since(common: Path) -> datetime | None:
+    """When question mode began, or None while it is off (or its state unreadable)."""
+    try:
+        return datetime.fromisoformat(json.loads(mode_path(common).read_text())["since"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _recall_mark(line: str) -> bool:
+    try:
+        return bool(json.loads(line).get("tool") == "recall")
+    except (ValueError, AttributeError):
+        return False
+
+
+def _mode(store: Path, action: str | None, now: datetime) -> list[str]:
+    """`mode enter` records its start; `mode exit` removes it and the recall marks."""
+    since, path = mode_since(store.parent), mode_path(store.parent)
+    if action == "enter" and since:
+        return [f"question mode: already on since {since.isoformat()}"]
+    if action == "enter":
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"since": now.isoformat()}) + "\n")
+        since = now
+    elif action == "exit":
+        path.unlink(missing_ok=True)
+        searches = store.with_name(findings.SEARCHES)
+        if searches.exists():
+            kept = [r for r in searches.read_text().splitlines() if not _recall_mark(r)]
+            searches.write_text("".join(f"{r}\n" for r in kept))
+        since = None
+    return [f"question mode: on since {since.isoformat()}" if since else "question mode: off"]
 
 
 def load(store: Path) -> tuple[list[dict[str, Any]], int]:
@@ -178,12 +218,15 @@ def _numbered(store: Path, records: list[dict[str, Any]], n: str) -> dict[str, A
 
 def command(args: argparse.Namespace, store: Path, now: datetime) -> list[str]:
     """Run one command on `store` at time `now`; return the lines to print."""
+    if args.cmd == "mode":
+        return _mode(store, args.action, now)
     records, _ = load(store)
     if args.cmd in ("add", "taken"):
         kind = "taken" if args.cmd == "taken" else "act" if args.act else "question"
-        unsearched = findings.unsearched(store.with_name(findings.SEARCHES), now)
-        if kind == "question" and unsearched:
-            raise RefusedError(unsearched)
+        asked = f"{args.text} {getattr(args, 'context', None) or ''}"
+        unrecalled = recall.unrecalled(store.with_name(findings.SEARCHES), asked)
+        if kind == "question" and unrecalled:
+            raise RefusedError(unrecalled)
         _check(args, records, kind)
         number = max((int(r["id"][1:]) for r in records if r["id"][1:].isdigit()), default=0)
         choices = [c for c in (getattr(args, "choices", "") or "").split("|") if c]
@@ -236,6 +279,8 @@ def parser() -> argparse.ArgumentParser:
             s.add_argument("--act", action="store_true", help="a publishing act awaiting a yes")
             s.add_argument("--item", help="the work item the question is about")
             s.add_argument("--context", help="one or two plain sentences: what it is about")
+    sub.add_parser("mode", help="question mode: boxes are asked only while it is on") \
+        .add_argument("action", nargs="?", choices=("enter", "exit"))  # fmt: skip
     sub.add_parser("list", help="print the numbered block for Ola")
     a = sub.add_parser("answer", help="close question N with Ola's words, verbatim")
     a.add_argument("n", help="the number the last list printed, or the stored id as q7")

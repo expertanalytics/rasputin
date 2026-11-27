@@ -24,6 +24,7 @@ pytestmark = pytest.mark.harness
 
 findings = harness_fixtures.Tool("findings")
 questions = harness_fixtures.Tool("questions")
+recall = harness_fixtures.Tool("recall")
 
 NOW = datetime(2026, 11, 3, 6, 0, tzinfo=UTC)
 HEAD = subprocess.run(["git", "-C", str(harness_fixtures.REAL), "rev-parse", "HEAD"],
@@ -38,13 +39,15 @@ SESSION = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
 @pytest.fixture
 def paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     """The ledger and the search record, neither yet written, and a session transcript
-    in which Ola said `AGREED`, read by `brief.py`'s quotation check."""
+    in which Ola said `AGREED`, read by `brief.py`'s quotation check. The recall gate
+    `add` keeps is opened here and tested in `test_add_is_refused_until_recall_ran`."""
     assert findings.LIMIT  # loads the tool, which puts tools/ on the path
     transcripts = tmp_path / "transcripts"
     transcripts.mkdir()
     (transcripts / f"{SESSION}.jsonl").write_text(json.dumps(human(AGREED, STAMP)) + "\n")
     monkeypatch.setattr(importlib.import_module("session_state"), "TRANSCRIPTS", transcripts)
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", SESSION)
+    monkeypatch.setattr(importlib.import_module("recall"), "unrecalled", lambda *_: None)
     git(tmp_path, "init", "-q")
     common = git(harness_fixtures.REAL, "rev-parse", "--path-format=absolute", "--git-common-dir")
     (tmp_path / ".git" / "objects" / "info" / "alternates").write_text(f"{common}/objects\n")
@@ -173,12 +176,37 @@ def test_the_gate_refuses_until_a_search_and_names_the_command(paths: tuple[Path
     assert findings.unsearched(paths[1], NOW + timedelta(minutes=61)) is not None
 
 
-def test_questions_add_is_refused_without_a_recent_search(tmp_path: Path) -> None:
+def test_add_is_refused_until_recall_ran_on_a_word_of_the_line_or_its_topic(
+    paths: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(importlib.import_module("recall"), "unrecalled", recall.unrecalled)
+    common = paths[1].parent
+    line = ("add", "Slivers split at the breakline.", "--commit", HEAD, "--ola", AGREED)
+    harness_fixtures.recalled(common, "mesh", NOW)
+    said = refused(paths, *line, "--topic=mesh")  # outside question mode nothing counts
+    assert said == "enter question mode first: python3 tools/questions.py mode enter"
+    paths[1].unlink()
+    harness_fixtures.question_mode(common, NOW - timedelta(hours=5))
+    harness_fixtures.searched(common, NOW)  # a ledger search alone is not enough
+    assert "python3 tools/recall.py" in refused(paths, *line, "--topic=mesh")
+    harness_fixtures.recalled(common, "clip the", NOW)
+    refused(paths, *line, "--topic=mesh")
+    harness_fixtures.recalled(common, "mesh", NOW - timedelta(hours=5, minutes=1))
+    refused(paths, *line, "--topic=mesh")  # before the mode began
+    harness_fixtures.recalled(common, "Mesh", NOW - timedelta(hours=4, minutes=59))
+    run(paths, *line, "--topic=mesh")  # since the mode began, however long ago
+    paths[1].unlink()
+    harness_fixtures.recalled(common, "sliver", NOW)
+    run(paths, *line, "--topic=x")
+    assert len(entries(paths)) == 2
+
+
+def test_questions_add_is_refused_outside_question_mode(tmp_path: Path) -> None:
     store = tmp_path / "questions.jsonl"
     args = questions.parser().parse_args(["add", "Shall we go on?", "--default", "go on"])
     with pytest.raises(questions.RefusedError) as caught:
         questions.command(args, store, NOW)
-    assert "findings.py search" in str(caught.value)
+    assert "question mode" in str(caught.value)
     assert not store.exists()
 
 
