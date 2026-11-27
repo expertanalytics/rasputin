@@ -16,8 +16,11 @@ this session's transcript as `brief.py --ola` finds them, or `--question <id>`, 
 question `questions.py` stored whose text holds the line and whose answer is
 one of `AGREE`, alone or with the box's `RECOMMENDED` suffix. Each `search`
 appends its time and words to `<git-common-dir>/findings-searches.jsonl`,
-untracked; `questions.py add` and design or probe briefs (`brief.py`) refuse
-through `unsearched` until a search ran in the last hour. Standard library only.
+untracked; design or probe briefs (`brief.py`) refuse through `unsearched`
+until a search ran in the last hour, and `add` through `recall.unrecalled`
+until `recall.py` ran, since question mode began, on a word of the line or its
+topics.
+Standard library only.
 """
 
 from __future__ import annotations
@@ -117,6 +120,11 @@ def command(args: argparse.Namespace, ledger: Path, searches: Path, now: datetim
     if args.cmd in ("replace", "drop") and not 0 < args.n <= len(entries):
         raise RefusedError(f"the ledger has no entry {args.n}")
     if args.cmd == "add":
+        import recall  # here, not at the top: it imports this module
+
+        unrecalled = recall.unrecalled(searches, " ".join([args.text, *args.topic]))
+        if unrecalled:
+            raise RefusedError(unrecalled)
         ola = _worded(args, searches)
         home = next(d for d in ledger.parents if d.is_dir())  # the ledger's own repository
         shown = subprocess.run(["git", "-C", str(home), "show", "-s", "--format=%H %cs",

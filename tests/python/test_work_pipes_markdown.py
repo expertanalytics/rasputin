@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from harness_fixtures import git, make_repo, run_script
+from harness_fixtures import git, make_repo, question_mode, recalled, run_script
 
 pytestmark = pytest.mark.harness
 
@@ -60,6 +60,8 @@ def note(repo: Path, name: str) -> None:
 
 
 def ask(repo: Path, text: str, *more: str) -> None:
+    question_mode(repo / ".git")  # questions are asked only in question mode
+    recalled(repo / ".git", text)
     ok(repo, "tools/questions.py", "add", text, "--default", "wait", *more)
 
 

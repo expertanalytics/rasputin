@@ -73,6 +73,8 @@ COPIED = (
     "tools/detach.py",
     # questions.py and brief.py refuse until a search of the settled results ran.
     "tools/findings.py",
+    # questions.py refuses a question until recall.py ran on one of its words.
+    "tools/recall.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"
@@ -146,6 +148,22 @@ def searched(common: Path, at: datetime | None = None) -> None:
     (common / "findings-searches.jsonl").write_text(
         json.dumps({"at": stamp, "words": ["x"]}) + "\n"
     )
+
+
+def recalled(common: Path, text: str, at: datetime | None = None) -> None:
+    """A run of `recall.py` on the words of `text` at `at` (default now), as it records it."""
+    common.mkdir(parents=True, exist_ok=True)
+    stamp = (at or datetime.now(UTC)).isoformat()
+    with (common / "findings-searches.jsonl").open("a") as out:
+        out.write(json.dumps({"at": stamp, "words": text.split(), "tool": "recall"}) + "\n")
+
+
+def question_mode(common: Path, since: datetime | None = None) -> Path:
+    """Question mode on since `since` (default now), as `questions.py mode enter` records it."""
+    path = common / "harness" / "question-mode.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"since": (since or datetime.now(UTC)).isoformat()}) + "\n")
+    return path
 
 
 def remote_urls(root: Path) -> dict[str, str]:

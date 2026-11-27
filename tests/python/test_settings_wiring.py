@@ -25,7 +25,15 @@ from typing import Any
 
 import pytest
 
-from harness_fixtures import REAL, bash_event, clean_env, git, is_work_tree_top, make_repo
+from harness_fixtures import (
+    REAL,
+    bash_event,
+    clean_env,
+    git,
+    is_work_tree_top,
+    make_repo,
+    question_mode,
+)
 
 # h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
 pytestmark = pytest.mark.harness
@@ -39,6 +47,7 @@ GOVERNANCE = f"{PROJECT}/.claude/hooks/guard_governance.py"
 PUSH = f"{PROJECT}/.claude/hooks/guard_push.py"
 GATES = f"{PROJECT}/.claude/hooks/gates_after_commit.py"
 SPAWN = f"{PROJECT}/.claude/hooks/guard_spawn.py"
+DISCUSS = f"{PROJECT}/.claude/hooks/guard_discuss.py"
 SESSION_STATE = 'python3 "$CLAUDE_PROJECT_DIR/tools/session_state.py"'
 
 CONFIG_SOURCES = "user_settings|project_settings|local_settings|skills"
@@ -53,6 +62,11 @@ NEW_WIRING = [
 #: h9 §6 (docs/increments/h9-spawn-briefs.md): one entry, after AskUserQuestion's.
 H9_WIRING = [
     pytest.param("PreToolUse", "Agent|SendMessage", SPAWN, id="guard-spawn"),
+]
+
+#: Ola 2026-11-27: no new box while he formulates his point; beside guard_unattended.
+DISCUSS_WIRING = [
+    pytest.param("PreToolUse", "AskUserQuestion", DISCUSS, id="guard-discuss"),
 ]
 
 EXISTING_WIRING = [
@@ -92,6 +106,16 @@ def test_guard_unattended_is_wired(event: str, matcher: str | None, command: str
         f"{event} (matcher {matcher!r}) does not run {command}; "
         f"{event} runs {[(m, c) for e, m, c in wired if e == event]}"
     )
+
+
+@pytest.mark.parametrize(("event", "matcher", "command"), DISCUSS_WIRING)
+def test_guard_discuss_is_wired(event: str, matcher: str | None, command: str) -> None:
+    """In the AskUserQuestion entry, after guard_unattended.py, so the entries keep order."""
+    assert (event, matcher, command) in wired_hooks()
+    entries = [e for e in settings()["hooks"][event] if e.get("matcher") == matcher]
+    assert len(entries) == 1, entries
+    commands = [hook["command"] for hook in entries[0]["hooks"]]
+    assert commands == [UNATTENDED, DISCUSS], commands
 
 
 @pytest.mark.parametrize(("event", "matcher", "command"), H9_WIRING)
@@ -158,7 +182,8 @@ def bare_path_hooks() -> list[Any]:
     The spec's entries are included whether or not settings.json has them yet,
     so `guard_unattended.py` is run by path before it is wired.
     """
-    specified = [tuple(p.values) for p in (*NEW_WIRING, *H9_WIRING, *EXISTING_WIRING)]
+    wirings = (*NEW_WIRING, *H9_WIRING, *DISCUSS_WIRING, *EXISTING_WIRING)
+    specified = [tuple(p.values) for p in wirings]
     params = []
     for event, matcher, command in dict.fromkeys([*wired_hooks(), *specified]):
         assert isinstance(event, str) and isinstance(command, str)
@@ -176,6 +201,7 @@ def harmless_event(repo: Path, event: str, matcher: str | None) -> dict[str, Any
         return {**bash_event(repo, "ls"), "hook_event_name": event}
     if event == "PreToolUse" and tools == {"AskUserQuestion"}:
         question = {"question": "Which one?", "header": "Q", "options": [{"label": "A"}]}
+        question_mode(repo / ".git")  # guard_discuss refuses every box outside question mode
         return {
             "hook_event_name": event,
             "tool_name": "AskUserQuestion",
@@ -262,7 +288,7 @@ def repo(tmp_path: Path) -> Path:
 
 
 def test_every_hook_script_is_covered_by_path() -> None:
-    """The nine hooks under `.claude/hooks/` are all wired as bare paths.
+    """The ten hooks under `.claude/hooks/` are all wired as bare paths.
 
     Without this, a hook rewired with an interpreter prefix would drop out of
     the by-path test below unnoticed.
@@ -278,6 +304,7 @@ def test_every_hook_script_is_covered_by_path() -> None:
         "notify_prompt.py",
         "guard_kill.py",
         "message_lint.py",
+        "guard_discuss.py",
     }
 
 
