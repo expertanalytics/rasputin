@@ -1,7 +1,6 @@
 # Increment records
 
-One file per full-lane increment, `docs/increments/NN-name.md`, read by
-every persona working on it.
+One file per full-lane increment, `docs/increments/NN-name.md`.
 
 ## The loop
 
@@ -27,8 +26,8 @@ every persona working on it.
    commit with the reason.
 4. `@reviewer` audits before the push (verdicts: `reviewer.md`). The main
    session applies any `APPROVED WITH WORDINGS` wordings exactly in one
-   commit before the push, needing no second round; the PR description
-   carries each round's verdict line.
+   commit before the push; the PR description carries each round's verdict
+   line.
 
 The main session writes the as-built record (pins, kill record, counts) from
 the handbacks and updates `ROADMAP.md`'s row in the PR. No stacked branches;
@@ -51,10 +50,12 @@ lists the paths). After three red CI runs, stop and ask Ola through
 A diff touching `include/terrain/refinement/`, `include/terrain/mesh/` or
 what drives them needs `@perf`'s acceptance run (`perf.md` §1).
 
+Over 700 counted lines: the increment file orders its PRs, each with
+acceptance criteria for that part alone; the parts are evaluated
+collectively only once all have landed.
+
 ## Cost constraints
 
-- **Reference, do not restate:** increment files are the source of truth;
-  fix a wrong fact there, not in a prompt.
 - **Mutation testing** only for a suite the increment file names
   invariant-critical, with its targets.
 - **A documentation defect found in an increment is fixed in its PR, or not
