@@ -76,7 +76,7 @@ from tin_engine.catchment_batch import (
     seed_for,
 )
 from tin_engine.cells import categories_of, cell_table, overlay
-from tin_engine.chains import start_chains
+from tin_engine.chains import StartChains, start_chains
 from tin_engine.cli_kit import THREADS
 from tin_engine.crs import (
     crs_label,
@@ -322,6 +322,10 @@ ROLES = {
 #: Which roles name chains that are rings, and therefore carry a closing edge no
 #: graph stores.
 CORE_CLOSED_ROLES: tuple[object, ...] = (ChainRole.Outer, ChainRole.Hole)
+
+#: The internal edge bit of a hole ring under --frozen-holes (9 is the cut's
+#: seam, 10 the catchment border); removed before any file is written.
+FROZEN_HOLE = 1 << 11
 
 #: Metres: input coordinates are UTM-shaped, so this is a millimetre on the
 #: ground.
@@ -984,6 +988,15 @@ def mesh(
             "Default: an eighth of a triangle's edge at --triangles.",
         ),
     ] = None,
+    frozen_holes: Annotated[
+        bool,
+        typer.Option(
+            "--frozen-holes",
+            help="Keep each hole ring of --domain as given: no vertex added on it and no edge "
+            "of it split, so the mesh can be joined to another along the hole. The DEM's error "
+            "along the hole edges is recorded, not refined.",
+        ),
+    ] = False,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
     z_unit: Z_UNIT = None,
@@ -1123,6 +1136,13 @@ def mesh(
         )
     if simplify_domain and domain is None:
         raise typer.BadParameter("needs --domain", param_hint="--simplify-domain")
+    if frozen_holes and domain is None:
+        raise typer.BadParameter("needs --domain", param_hint="--frozen-holes")
+    if frozen_holes and simplify_domain:
+        raise typer.BadParameter(
+            "--frozen-holes keeps the holes as given; --simplify-domain would move them",
+            param_hint="--simplify-domain",
+        )
     if simplify_domain and triangles is None and domain_max_shift is None:
         raise typer.BadParameter(
             "needs --triangles, whose budget sets the farthest the outline may shift, or "
@@ -1278,6 +1298,8 @@ def mesh(
             )
             if cells.nx * cells.ny > 1:
                 part = _cut_partition(planned, tolerance, cells, pieces or 1, budget)
+        if part is not None and frozen_holes:
+            raise typer.BadParameter("--frozen-holes does not run on pieces yet", param_hint=flag)
         if part is not None:  # each of these describes one mesh, which a cut run has not
             asked = (
                 ("--stats", stats), ("--out-edges", out_edges), ("--record", record_path),
@@ -1393,6 +1415,7 @@ def mesh(
             budget if domain is not None else None,
             rms,
             (class_m if dem_heights else None, held_source),
+            frozen_holes,
         )
     except RunError as exc:
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
@@ -3461,6 +3484,7 @@ class _Tuning:
     lines: ToleranceLines | None = None
     steep: ToleranceSlope | None = None
     threads: int = 0
+    frozen: int = 0  # the edge bits refinement adds no vertex on, besides a piece's seam
 
 
 def _dem_mesh(
@@ -3488,6 +3512,7 @@ def _dem_mesh(
     piece_budget: int | None = None,
     rms: bool = False,
     heights: tuple[float | None, SourceWindows | None] = (None, None),
+    frozen_holes: bool = False,
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``held``'s tile
     (with ``cut``, ``held`` is the window's grid alone, and the cut run is
@@ -3509,6 +3534,7 @@ def _dem_mesh(
     With ``rms``, or a budget, the error summary of the mesh is measured.
     With a class width in ``heights``, the mesh's DEM height shares are
     measured, on its source windows when given (the reprojected path).
+    With ``frozen_holes``, no vertex is added on the domain's hole rings.
     Returns the mesh, the record entries it knows, and the ``--stats`` sizes;
     ``clock`` gets the phases.
     ``dem`` names the source in messages. Every refusal is a usage error in the
@@ -3520,10 +3546,14 @@ def _dem_mesh(
     values: dict[str, Value] = {}
     domain_vertices = domain_holes = None
     feature_counts = None
+    frozen = 0
     if domain is not None:
         started = start_chains(domain, features.features if features else (), vocabulary)
         chains = [(indices, ROLES[role], mask) for indices, role, mask in started.chains]
         rings = (domain.polygon.exterior, *domain.polygon.interiors)
+        frozen = FROZEN_HOLE if frozen_holes and len(rings) > 1 else 0
+        for k in range(1, len(rings) if frozen else 1):  # the hole chains
+            chains[k] = (chains[k][0], chains[k][1], chains[k][2] | frozen)
         domain_vertices, domain_holes = sum(len(r.coords) - 1 for r in rings), len(rings) - 1
         shape = f"{plural(domain_holes, 'hole', 'holes')}, {domain_vertices} vertices"
         values["domain"] = f"{domain_name}: 1 outline, {shape}"
@@ -3536,6 +3566,8 @@ def _dem_mesh(
                 chains.append((at, ChainRole.Breakline, seam))
                 vertices = np.concatenate([vertices, xy])
         run = _engine(vertices, chains, delaunay, spacing, clock)
+        if frozen and run.noded is not None:
+            values |= _holes_kept(run.noded, started, len(rings) - 1, spacing)
         if features is not None:
             values["start_mesh"] = "the domain outline and the feature lines"
             feature_counts = (
@@ -3583,7 +3615,8 @@ def _dem_mesh(
             dem, tolerance, min_angle, feet, grid, checks, budget, rms and budget is None,
             class_m is not None, class_m or 1.0, source,
         )  # fmt: skip
-        refine_with = functools.partial(_refined, tuning=_Tuning(gain, lines, steep, threads))
+        tuning = _Tuning(gain, lines, steep, threads, frozen)
+        refine_with = functools.partial(_refined, tuning=tuning)
         if cut is not None:
             from tin_engine.basin_run import cut_run
 
@@ -3627,6 +3660,52 @@ def _dem_mesh(
         feature_counts=feature_counts,
         heights=heights_made,
     )
+
+
+def _holes_kept(
+    noded: NodedPslg, started: StartChains, holes: int, spacing: float
+) -> dict[str, Value]:
+    """Refuse a hole ring the noder changed: a node added on it (a line meeting
+    it between its vertices) or vertices merged. Else the record entries."""
+    moved = 0.0
+    for k in range(holes):
+        given = started.chains[1 + k][0]
+        walk = [int(i) for i in noded.indices_of(1 + k)]
+        nodes = np.asarray(noded.node_of_input_vertex)[given]
+        inputs = set(nodes.tolist())
+        added = [i for i in walk if i not in inputs]
+        if added:
+            x, y = noded.vertices[added[0]][:2]
+            raise typer.BadParameter(
+                f"a line meets the edge of hole {k + 1} of --domain between its vertices at "
+                f"({x:.3f}, {y:.3f}); give the line a vertex there or mesh without it",
+                param_hint="--frozen-holes",
+            )
+        if len(walk) < len(given):
+            raise typer.BadParameter(
+                f"hole {k + 1} of --domain has {len(given)} vertices but {len(walk)} after "
+                f"snapping to the {spacing:g} m grid; vertices closer than that merged",
+                param_hint="--frozen-holes",
+            )
+        shift = np.abs(np.asarray(noded.vertices)[nodes, :2] - started.vertices[given])
+        moved = max(moved, float(shift.max()))
+    return {"frozen_holes": holes, "hole_vertices_snapped_max_m": moved}
+
+
+def _frozen_error(tile: DemTile, out: RefineOutcome, bit: int) -> float | None:
+    """The largest |DEM - chord| along the edges carrying ``bit``, at points a
+    cell apart from end to end; None with no valid point."""
+    ends = np.asarray(out.edges, dtype=np.int64)[(np.asarray(out.masks) & np.uint32(bit)) != 0]
+    xy, z, valid = np.asarray(out.vertices)[:, :2], np.asarray(out.z), np.asarray(out.valid)
+    a, b = xy[ends[:, 0]], xy[ends[:, 1]]
+    cell = min(tile.meta.delta_x, abs(tile.meta.delta_y))
+    n = np.maximum(1, np.ceil(np.hypot(*(b - a).T) / cell)).astype(np.int64) + 1  # points
+    e = np.repeat(np.arange(len(ends)), n)
+    t = (np.arange(int(n.sum())) - np.repeat(np.cumsum(n) - n, n)) / (n[e] - 1)
+    dem, ok = sample(to_core(tile), a[e] + t[:, None] * (b - a)[e])
+    za, zb = z[ends[e, 0]], z[ends[e, 1]]
+    error = np.abs(dem - (za + t * (zb - za)))[ok & valid[ends[e]].all(axis=1)]
+    return float(error.max()) if error.size else None
 
 
 def _budget_refined(
@@ -3734,6 +3813,7 @@ def _refined(
     tile = held.take()
     meta = tile.meta
     tolerance, feet, threads = how.tolerance, how.feet, tuning.threads
+    frozen |= tuning.frozen
     # The tile itself is measured for the height shares when no source is held.
     own = TileWindows(tile) if how.dem_heights and how.source is None else None
     values: dict[str, Value] = {}
@@ -3764,6 +3844,8 @@ def _refined(
     _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
     if not out.ok():
         raise typer.BadParameter(f"{how.dem}: {out.message}", param_hint="--dem")
+    if tuning.frozen:
+        values["frozen_edges_max_error_m"] = _frozen_error(tile, out, tuning.frozen)
     strip = edge_strip.generate(to_core(tile), out, clock, frozen)  # while the tile is held
     if how.grid is None or how.checks is None:
         final = edge_strip.run(
@@ -3827,6 +3909,8 @@ def _refined(
             z=z,
             valid=final.valid,
         )
+    if tuning.frozen:
+        trimmed = _holes_trimmed(final, trimmed, tuning.frozen)
     values |= {
         "start_min_angle_deg": how.min_angle,
         "start_quality_gain_deg": tuning.gain,
@@ -3865,6 +3949,26 @@ def _refined(
         table, more = _height_table(how, own, meta.crs, trimmed, tolerance, threads, clock)
         values |= more
     return Refined(out, final, z, trimmed, values, final.on_frozen, table)
+
+
+def _holes_trimmed(final: RefineOutcome, trimmed: Trimmed, bit: int) -> Trimmed:
+    """Refuse a run whose trim dropped a hole edge; else ``trimmed`` without ``bit``."""
+    hole = (np.asarray(final.masks) & np.uint32(bit)) != 0
+    n, m = int(hole.sum()), int(np.count_nonzero(trimmed.edge_masks & np.uint32(bit)))
+    if m < n:
+        ends, valid = np.asarray(final.edges, dtype=np.int64)[hole], np.asarray(final.valid)
+        tris = np.asarray(final.triangles, dtype=np.int64)
+        kept = np.zeros(len(valid), dtype=bool)
+        kept[tris[valid[tris].all(axis=1)]] = True
+        bad = ~valid[ends] if not valid[ends].all() else ~kept[ends]
+        x, y = np.asarray(final.vertices)[ends.ravel()[np.argmax(bad.ravel())]][:2]
+        raise typer.BadParameter(
+            f"{n - m} of the {n} hole edges of --domain have an end with no DEM under it (nodata "
+            "or off the DEM), so the mesh could not be joined along the hole; give holes that lie "
+            f"on DEM data; first at ({x:.3f}, {y:.3f})",
+            param_hint="--frozen-holes",
+        )
+    return replace(trimmed, edge_masks=trimmed.edge_masks & ~np.uint32(bit))
 
 
 def _height_width(
