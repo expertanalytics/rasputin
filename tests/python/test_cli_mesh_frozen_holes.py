@@ -25,11 +25,10 @@ Its figures, by hand:
   chord minus DEM at a break x is (x - x_a)(x_b - x) / 1,000 m, here 0.5, 0.8,
   0.9, 0.8, 0.5 m at 10 to 50 m from the left end: largest 0.9 m, at the
   edge's middle, (470, 840) or (530, 840), itself a DEM node.
-* ``frozen_edges_max_error_m`` samples each edge from end to end at the cell
-  size, 10 m, both ends included: 11 points, t = 0, 0.1, ..., 1, so the
-  middle t = 0.5 is sampled whichever end is first, and the figure is 0.9 m
-  (the square's largest is 0.6 m). The ends' z are at most 3.6 m, so float32
-  storage moves the figure by under 1e-6.
+* ``frozen_edges_max_error_m`` is exact for the bilinear DEM on a straight
+  edge (design section 3.6), so the figure is 0.9 m (the square's largest is
+  0.6 m). The ends' z are at most 3.6 m, so float32 storage moves the figure
+  by under 1e-6.
 * DEM nodes: local x = 500 + 10 i, y = 800 + 10 j lies on the ring where
   4|i| + 3|j| = 24 (8 nodes: the corners and the four middles) and strictly
   inside where 4|i| + 3|j| < 24 (15 + 2 (13 + 11 + 7 + 5 + 3) = 93 nodes).
@@ -39,6 +38,13 @@ Its figures, by hand:
   a multiple of 1/5).
 
 The diamond's corners are on the 1 mm lattice, so they do not move.
+
+A third domain has one hole half a cell off the DEM's columns, corners
+(205, 100), (395, 100), (395, 300), (205, 300) (design section 5, *F1 exact
+error figure*). The corners' bilinear z is 87.05 and 11.05 m, so the bottom
+edge's chord is 87.05 - 0.4 (x - 205); at the node x = 300 the DEM is 40 and
+the chord 49.05: error 9.05 m, the largest. Sampling at cell steps from
+x = 205 finds 295 and 305 instead, and reads 9.0000005.
 """
 
 from __future__ import annotations
@@ -52,6 +58,7 @@ import pytest
 from shapely.geometry import Point, Polygon
 
 from cli_helpers import USAGE, UTM33, Ring, geojson, help_text, invoke, squashed
+from feature_fixtures import Feat, write_geojson
 from geotiff_fixtures import TIE_X, TIE_Y, micro_tiff
 from pieces_fixtures import delaunay_violations
 from recordread import file_field
@@ -89,6 +96,10 @@ SQUARE_HOLE: Ring = [
     local(400, 600),
 ]
 DIAMOND: Ring = [local(440, 800), local(500, 720), local(560, 800), local(500, 880)]
+#: A hole whose x corners lie half a cell off the DEM's columns.
+OFF_GRID_HOLE: Ring = [local(205, 100), local(395, 100), local(395, 300), local(205, 300)]
+#: The square hole with an 11th vertex 0.2 mm from (450.0004, 400): both snap to (450.000, 400).
+MERGING_HOLE: Ring = [SQUARE_HOLE[0], local(450.0002, 400), *SQUARE_HOLE[1:]]
 
 
 def heights() -> np.ndarray:
@@ -139,6 +150,10 @@ class Inputs:
         self.square = geojson(root / "square.geojson", OUTER, (SQUARE_HOLE,))
         self.two_holes = geojson(root / "two-holes.geojson", OUTER, (SQUARE_HOLE, DIAMOND))
         self.no_hole = geojson(root / "no-hole.geojson", OUTER)
+        self.off_grid = geojson(root / "off-grid.geojson", OUTER, (OFF_GRID_HOLE,))
+        self.merging = geojson(root / "merging.geojson", OUTER, (MERGING_HOLE,))
+        unit = Feat(1, Polygon(OUTER), {"name": "u1"})
+        self.units = write_geojson(root / "units.geojson", [unit], UTM33)
         self.through_vertices = write_line(root / "through-vertices.geojson", 500.0004)
         self.between_vertices = write_line(root / "between-vertices.geojson", 512.3)
 
@@ -413,6 +428,20 @@ class TestF1SlantedHole:
         )
 
 
+class TestF1ExactErrorFigure:
+    """F1: the recorded error is exact on the DEM, not read between its nodes."""
+
+    def test_a_hole_half_a_cell_off_the_columns_records_9_05(self, inputs: Inputs) -> None:
+        # 9.05 m at the node x = 300 on the bottom and top edges (module docstring);
+        # measured on 274a2efe, sampling at cell steps: 9.0000005.
+        args = mesh_args(
+            inputs.dem, inputs.off_grid, "--tolerance", str(TOLERANCE), "--frozen-holes"
+        )
+        run = Run(inputs.root, "off-grid", *args)
+        assert_ring_kept(run.vtk, OFF_GRID_HOLE)
+        assert run.record["frozen_edges_max_error_m"] == pytest.approx(9.05, abs=1e-5)
+
+
 # ---------------------------------------------------------------- F2
 
 
@@ -535,6 +564,36 @@ class TestF3Refusals:
         }[case]
         Run(inputs.root, f"{case}-plain", *args, record=False).ok()
         assert_refused(Run(inputs.root, case, *args, "--frozen-holes", record=False), *says)
+
+    def test_catchments_is_refused_before_any_land_cover_is_asked(self, inputs: Inputs) -> None:
+        """Section 3.1: --catchments replaces the domain, so its holes would not be
+        --domain's. One unit, the outer square, no land cover: today's land-cover
+        message would be the wrong reason. No run without the flag: it needs land
+        cover and a .gpkg output."""
+        args = mesh_args(
+            inputs.dem,
+            inputs.square,
+            *("--tolerance", str(TOLERANCE), "--frozen-holes"),
+            *("--catchments", str(inputs.units), "--catchments-max-shift", "0"),
+        )
+        run = Run(inputs.root, "catchments", *args)
+        assert_refused(
+            run,
+            "--catchments",
+            "--frozen-holes keeps the holes of --domain; "
+            "--catchments replaces the domain with the union of its units",
+        )
+        assert "land-cover" not in run.output, "refused for the land-cover reason"
+
+    def test_hole_vertices_merged_by_the_snap_are_refused(self, inputs: Inputs) -> None:
+        """Section 3.3's second message: 11 vertices, 10 after the 1 mm snap."""
+        base = mesh_args(inputs.dem, inputs.merging, "--tolerance", str(TOLERANCE))
+        Run(inputs.root, "merging-plain", *base).ok()  # measured: 5,438 triangles
+        assert_refused(
+            Run(inputs.root, "merging", *base, "--frozen-holes"),
+            "hole 1 of --domain has 11 vertices but 10 after snapping to the 0.001 m grid; "
+            "vertices closer than that merged",
+        )
 
     # The first end named: measured with a stand-in on master, (400, 400) on the
     # tolerance run and (400, 600) on the budget run's kept trial; the order is
