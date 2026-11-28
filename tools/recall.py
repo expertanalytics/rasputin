@@ -18,8 +18,9 @@ holds every topic word, case-insensitive; each source prints at most
 Each run appends its time and words, as `tool: recall`, to the record
 `findings.py search` keeps, so it counts as a ledger search too;
 `questions.py add` and `findings.py add` refuse through `unrecalled` until a
-run since question mode began (`questions.py mode enter`) named a word of the
-question or ledger line. Standard library only.
+run named a word of the question or ledger line: since question mode began
+(`questions.py mode enter`) while it is on, any kept run while it is off, as
+`mode exit` removes them all. Standard library only.
 """
 
 from __future__ import annotations
@@ -52,12 +53,10 @@ QUOTES = 3
 
 
 def unrecalled(searches: Path, text: str) -> str | None:
-    """The refusal unless a recall since question mode began named a word of `text`."""
+    """The refusal unless a recall named a word of `text`, by the module docstring's rule."""
     import questions  # here, not at the top: it imports this module
 
-    since = questions.mode_since(searches.parent)
-    if since is None:
-        return "enter question mode first: python3 tools/questions.py mode enter"
+    since = questions.mode_since(searches.parent) or datetime.min.replace(tzinfo=UTC)
     try:
         lines = searches.read_text().splitlines()
     except OSError:

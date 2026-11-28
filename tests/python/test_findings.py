@@ -182,9 +182,11 @@ def test_add_is_refused_until_recall_ran_on_a_word_of_the_line_or_its_topic(
     monkeypatch.setattr(importlib.import_module("recall"), "unrecalled", recall.unrecalled)
     common = paths[1].parent
     line = ("add", "Slivers split at the breakline.", "--commit", HEAD, "--ola", AGREED)
-    harness_fixtures.recalled(common, "mesh", NOW)
-    said = refused(paths, *line, "--topic=mesh")  # outside question mode nothing counts
-    assert said == "enter question mode first: python3 tools/questions.py mode enter"
+    harness_fixtures.recalled(common, "clip", NOW - timedelta(days=3))
+    assert "python3 tools/recall.py" in refused(paths, *line, "--topic=mesh")  # mode off
+    harness_fixtures.recalled(common, "mesh", NOW - timedelta(days=3))
+    run(paths, *line, "--topic=mesh")  # mode off: any mark counts, however old
+    paths[0].unlink()
     paths[1].unlink()
     harness_fixtures.question_mode(common, NOW - timedelta(hours=5))
     harness_fixtures.searched(common, NOW)  # a ledger search alone is not enough
@@ -201,12 +203,12 @@ def test_add_is_refused_until_recall_ran_on_a_word_of_the_line_or_its_topic(
     assert len(entries(paths)) == 2
 
 
-def test_questions_add_is_refused_outside_question_mode(tmp_path: Path) -> None:
+def test_questions_add_outside_question_mode_needs_a_recall(tmp_path: Path) -> None:
     store = tmp_path / "questions.jsonl"
     args = questions.parser().parse_args(["add", "Shall we go on?", "--default", "go on"])
     with pytest.raises(questions.RefusedError) as caught:
         questions.command(args, store, NOW)
-    assert "question mode" in str(caught.value)
+    assert "python3 tools/recall.py" in str(caught.value)
     assert not store.exists()
 
 
