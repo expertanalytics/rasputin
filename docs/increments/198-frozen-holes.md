@@ -1,9 +1,10 @@
 # Increment 198: `--frozen-holes`, a domain's holes kept exactly as given
 
 Status: **designed** (`@architect`, 2026-11-28, on master `949bc7d66`; amended after design
-review: a hole vertex with no DEM under it is refused, section 3.4). Next: design review
-(`@reviewer`), then red (`@tester`), green (`@developer`), test run, `@perf`'s acceptance run,
-code review.
+review: a hole vertex with no DEM under it is refused, section 3.4; amended after code review
+at `274a2efe`: `--catchments` refused, the error figure exact on the DEM, the merged-vertex
+refusal tested). Next: red (`@tester`), green (`@developer`), test run, `@perf`'s acceptance
+run, code review.
 
 Lane: **full**. The change is in `rasputin mesh`'s refinement driver (`cli.py`'s `_refined` and
 `_dem_mesh`), which `docs/increments/README.md` (*Acceptance*) counts as "what drives"
@@ -28,10 +29,10 @@ What it gives up: the DEM's error along a hole edge is not refined away. It is m
 recorded (`frozen_edges_max_error_m`), not judged against the tolerance. Every DEM node off the
 hole edges is still within the tolerance.
 
-Two cases are refused, not repaired. One is a constraint line (a `--lines` line or a land-cover border)
-that meets a hole edge between its vertices. The noder would put a vertex there, which splits
-the hole edge. The run stops and names the point. The user either gives the line a vertex
-there or meshes without the line. The other is a hole vertex with no DEM under it (nodata or
+Two cases are refused, not repaired. One is a constraint line (a `--lines` line or a land-cover
+border) that meets a hole edge between its vertices. The noder would put a vertex there, which
+splits the hole edge. The run stops and names the point. The user either gives the line a
+vertex there or meshes without the line. The other is a hole vertex with no DEM under it (nodata or
 off the DEM): trimming would drop it and its edges, so the hole ring could not be joined.
 
 ## 1. Prior art: legacy and literature
@@ -68,9 +69,10 @@ None of the ideas-file entries is taken up or overlaps this one.
 
 ## 2. Measured (probes on master `949bc7d66`)
 
-The probes are scratch scripts (`probe.py`, `probe2.py`, `probe3.py`, `probe3b.py` in the
-scratch folder `arch-frozen-holes-20261128/`; not committed). All of them use the fixture of
-section 5.
+The probes are scratch scripts (`probe.py`, `probe2.py`, `probe3.py`, `probe3b.py`, `probe4.py`,
+`probe5.py` in the scratch folder `arch-frozen-holes-20261128/`; not committed). All of them use
+the fixture of section 5; `probe4.py` and `probe5.py` set two of its DEM nodes to nodata. Two
+more, `probe6.py` and `probe7.py`, ran on the green head `274a2efe` (the last two items).
 
 - **Today the hole edges are split.** With no flag, the output has **28 vertices on the hole
   edges**: the 10 hole vertices and 18 added by refinement. The output has 5,438 triangles.
@@ -109,6 +111,20 @@ section 5.
   outcome has `on_frozen` 0 and `on_frozen_max_error` 0.0: the core counts only stored points
   (strip and check points) on a frozen edge, and its DEM node scan skips them uncounted
   (`scan.hpp:36-44`).
+- **Merged hole vertices** (`probe6.py`). The square hole with an 11th vertex at (450.0002, 400),
+  beside (450.0004, 400): both snap to (450.000, 400). Without the flag the run exits 0 (5,438
+  triangles). With it, exit 2: "hole 1 of --domain has 11 vertices but 10 after snapping to the
+  0.001 m grid; vertices closer than that merged".
+- **`--catchments` replaces the domain** (`probe6.py`, and `cli.py:1271-1275`, `_units` at
+  1921-1929): the mesh's domain becomes the union of the simplified units, so the holes frozen
+  would be the union's, not `--domain`'s. A one-unit file covering the outer square has no hole
+  at all. Both runs, with and without the flag, exit 2 today before reaching it: `--catchments`
+  "needs --land-cover with a land-cover class file and a .gpkg output" (`_reservoir_source`,
+  `cli.py:1114`).
+- **Cell-step sampling reads low** (`probe7.py`). A hole with corners (205, 100), (395, 100),
+  (395, 300), (205, 300), each half a cell off the DEM's columns: the green head records
+  `frozen_edges_max_error_m` **9.0000005**, sampling at x = 295 and 305 between the nodes. At the
+  node x = 300 the error is **9.05** (section 5).
 
 ## 3. Design (`src_python/tin_engine/cli.py`, `run_record.py`; Python only)
 
@@ -122,6 +138,10 @@ Refused, as usage errors and before any DEM is read where the inputs allow:
 - without `--domain`: "--frozen-holes needs --domain";
 - with `--simplify-domain`: "--frozen-holes keeps the holes as given; --simplify-domain would
   move them";
+- with `--catchments`, hint `--catchments`: "--frozen-holes keeps the holes of --domain;
+  --catchments replaces the domain with the union of its units". It comes before
+  `_reservoir_source` reads the source (`cli.py:1114`), so it needs no land cover and reads no
+  file. Freezing the union's holes is left out (section 9);
 - on a cut run (`--pieces`, or a `--piece-budget` the window exceeds): "--frozen-holes does not
   run on pieces yet". The reason: the partition lines are clipped to the domain, so one that
   crosses a hole would put a node on the hole edge (section 3.3), and the user cannot give an
@@ -130,7 +150,8 @@ Refused, as usage errors and before any DEM is read where the inputs allow:
 ### 3.2 The bit
 
 `FROZEN_HOLE = 1 << 11`, a module constant in `cli.py` (bit 9 is the cut's seam,
-`src_python/tin_engine/features.py:180-182`; bit 10 is taken by `cli.py:1083`). With the flag, the hole
+`src_python/tin_engine/features.py:180-182`; bit 10 is taken by `cli.py:1083`). With the flag,
+the hole
 chains from `start_chains` (mask 0 today, `chains.py:51-52`) get this bit in `_dem_mesh`. The
 noder unions masks (`_chain_masks`), so a hole edge that is also a land-cover border keeps
 both. `_Tuning` gets a field `frozen: int = 0`, and `_refined` passes `frozen | tuning.frozen`
@@ -178,19 +199,34 @@ that distance and takes the other mesh's (x, y).
 
 ### 3.6 Recorded
 
-| entry | wording | where | value |
-|---|---|---|---|
-| `frozen_holes` | "Holes of --domain kept as given (--frozen-holes)" | mesh file, after `max_error_m` | the number of holes; None (not written) without the flag or with no hole |
-| `frozen_edges_max_error_m` | "Largest height error along the kept hole edges, not refined" | mesh file, after `frozen_holes` | see below; None (not written) without the flag, or with no valid point |
-| `hole_vertices_snapped_max_m` | "Farthest a hole vertex was moved by the snap to the grid" | counts section | max over hole vertices of the larger of \|x − x_in\| and \|y − y_in\|; None (not written) without the flag |
+- `frozen_holes`, worded "Holes of --domain kept as given (--frozen-holes)", in the mesh file
+  after `max_error_m`: the number of holes; None (not written) without the flag or with no hole.
+- `frozen_edges_max_error_m`, worded "Largest height error along the kept hole edges, not
+  refined", in the mesh file after `frozen_holes`: see below; None (not written) without the
+  flag, or with no valid point.
+- `hole_vertices_snapped_max_m`, worded "Farthest a hole vertex was moved by the snap to the
+  grid", in the counts section: the largest over hole vertices of the larger of |x − x_in| and
+  |y − y_in|; None (not written) without the flag.
 
 `frozen_edges_max_error_m` is computed in `_refined` right after `refine`, while the tile is
-held. Points are placed along each frozen edge from end a to end b at steps of the tile's cell
-size (the smaller of dx and dy), both ends included. Each point's DEM z comes from `sample`
-(bilinear, as the mesh's vertex z). Each point's mesh z is the chord `z_a + t (z_b − z_a)`,
+held. Each frozen edge from end a to end b, at parameter t from 0 to 1, is cut into pieces at
+each t where it crosses a DEM node column (x = x_min + i dx) or row (y = y_max − j dy); t = 0
+and 1 are included and equal t merged. Each piece lies in one DEM cell. A point's DEM z comes
+from `sample` (bilinear, as the mesh's vertex z), its mesh z is the chord `z_a + t (z_b − z_a)`,
 using refine's z of the two ends. The vertices on a frozen edge never move and none is added,
-so the chord is the written mesh's z there. The value is the largest |DEM − chord| over valid
-points. On the reprojected path the tile is the resampled grid, so the figure is measured
+so the chord is the written mesh's z there. On a piece, the bilinear DEM is a quadratic in t
+(linear on an axis-aligned edge), and so is its difference e(t) = DEM − chord. So |e| on a
+piece is largest at one of its ends or at the vertex of that quadratic. Each piece's two ends
+and its midpoint are sampled; the quadratic through the three values of e gives the vertex,
+which counts where it lies strictly inside the piece. The value is the largest |e| over all of
+these, which is exact for the bilinear DEM on any straight edge, up to rounding. A point with
+no valid sample is left out, and a piece's vertex counts only where its three samples are valid.
+
+Why exact rather than the cell steps the green head samples at: steps of a cell not lined up
+with the DEM's nodes fall between them, where the bilinear DEM is the nodes' average, not their
+peak. The figure then reads low (9.0000005 against 9.05, section 2), and the figure exists for
+a user deciding whether a join is good enough. Exactness costs about six lines more. On the
+reprojected path the tile is the resampled grid, so the figure is measured
 against that grid. These two entries go in the file because the file's `max_error_m` no longer
 covers the hole edges; a reader of the file needs both. The core's `on_frozen_max_error` was
 weighed as a simpler source and does not serve: it counts stored points only, and is 0 on the
@@ -249,6 +285,16 @@ inside the hole, and 80 on the hole ring (the perimeter of a 21 × 21 block), wh
   - With a `--lines wall=` line x = 500.0004 m from y = 0 to 1,000 m (with `--edges wall`),
     which meets the hole only at its vertices: accepted, and the same 10 hole vertices.
   - The same 10 hole vertices with `--triangles 3000` in place of `--tolerance`.
+- **F1 exact error figure.** A domain with one hole, corners local (205, 100), (395, 100),
+  (395, 300), (205, 300), each half a cell off the DEM's columns, with the flag:
+  `frozen_edges_max_error_m` is 9.05 to 1e-5. By hand: the corners' z is bilinear, 87.05 and
+  11.05, so the bottom edge's chord is 87.05 − 0.4 (x − 205); at the node x = 300 the DEM is 40
+  and the chord 49.05, error 9.05, the largest (the error at the column crossings is
+  −30.95 − 0.4 u − u² / 1,000 with u = x − 500, largest at u = −200). The side edges have
+  constant z, error 0; the top edge mirrors the bottom. Measured on `274a2efe`: 9.0000005
+  (cell steps at x = 295 and 305), so red. The square's 0.600 and the diamond's 0.9 are
+  unchanged: their largest errors lie on DEM columns, and the DEM, a function of x alone, is
+  linear on every piece.
 - **F2 within tolerance off the frozen edges, largest error on them recorded.** In the F1 run,
   each of the 9,760 DEM nodes off the hole ring is within 0.1 m (plus 1e-9) of the plane of the
   output triangle holding it, recomputed from the written vertices (measured: largest
@@ -257,7 +303,8 @@ inside the hole, and 80 on the hole ring (the perimeter of a 21 × 21 block), wh
 - **F3 refusal.**
   - A `--lines wall=` line x = 512.3 m from y = 0 to 1,000 m meets the bottom and top hole edges
     between their vertices. With the flag: exit code 2, no output file, and a message naming
-    "the edge of hole 1" and the point local (512.3, 600) or (512.3, 400), printed in the files' coordinates (the offset added) to 3 decimals.
+    "the edge of hole 1" and the point local (512.3, 600) or (512.3, 400), printed in the files'
+    coordinates (the offset added) to 3 decimals.
     The walk order is not a contract; measured today, 600 comes first. Without the flag the
     same run is accepted.
   - `--frozen-holes` without `--domain` is refused with "needs --domain".
@@ -270,6 +317,14 @@ inside the hole, and 80 on the hole ring (the perimeter of a 21 × 21 block), wh
     decimals (measured: (400, 400) first on the tolerance run, (400, 600) on the budget run; the
     order is not a contract). Without the flag both runs are accepted.
   - `--frozen-holes` with `--pieces 4` is refused with "does not run on pieces yet".
+  - `--frozen-holes` with `--catchments units.geojson --catchments-max-shift 0` (one unit, the
+    outer square, in the DEM's CRS; no land cover) is refused with "--catchments replaces the
+    domain with the union of its units". No run without the flag is asked: it needs land cover
+    and a `.gpkg` output. Measured on `274a2efe`: exit 2 with the land-cover message, so red.
+  - The square hole with an 11th vertex at local (450.0002, 400), between (400, 400) and
+    (450.0004, 400): refused with "hole 1 of --domain has 11 vertices but 10 after snapping to
+    the 0.001 m grid; vertices closer than that merged". Without the flag the run is accepted
+    (measured: 5,438 triangles). Measured on `274a2efe`: already passes (the code exists, untested).
   - Each refusal writes no file.
 - **F4 off is identity.**
   - Without the flag, the fixture's hole edges are split as today: more than 10 output vertices
@@ -290,6 +345,14 @@ No suite here is invariant-critical, so no mutation testing.
   clipped to the domain the same way. Land-cover borders across a frozen hole are out of scope:
   the use meshes the band without land cover.
 - **Two hole vertices within the snap** merge. Refused (section 3.3, second message).
+- **A hole edge whose triangle is dropped while both its ends have z:** refinement can put a
+  vertex at a nodata DEM node next to a hole edge, and `trim` then drops the triangle holding
+  the edge with it. The edge is missing from `trim`'s output, so section 3.4 refuses the run; its
+  point is then the dropped edge's first end, which has z, and "an end with no DEM under it"
+  reads loosely (the nodata is at the node next to the edge). Accepted as worded; no fixture
+  was probed for it, so no test.
+- **`--catchments`:** the domain becomes the union of the units, whose holes are not
+  `--domain`'s. Refused (section 3.1).
 - **A domain in another CRS:** "as given" means as moved into the DEM's CRS. The snap figure is
   measured against those coordinates. A user joining meshes gives the domain in the DEM's CRS.
 - **A hole vertex with no DEM under it:** refused (section 3.4). **Nodata under the middle of
@@ -299,12 +362,13 @@ No suite here is invariant-critical, so no mutation testing.
 ## 7. Speed
 
 Off by default, so no run changes unless it asks. `bench_quick` has 4 cases with a `--domain`
-(`docs/benchmarks/quick/cases.toml`), and all 4 are polygons with **0 holes** (checked with shapely). So the gated cost there is 0.
+(`docs/benchmarks/quick/cases.toml`), and all 4 are polygons with **0 holes** (checked with
+shapely). So the gated cost there is 0.
 
 With the flag, the new work is one membership pass over each hole chain after noding, and one
-sampling pass along the hole edges: (ring length / cell) points. That is, for example, 13,000
-points for 130 km of ring at 10 m, one bilinear sample each, against seconds to minutes of
-refinement. Not gated.
+sampling pass along the hole edges: two samples per piece, and at most sqrt(2) × ring length /
+cell pieces. That is, for example, at most 37,000 points for 130 km of ring at 10 m, one
+bilinear sample each, against seconds to minutes of refinement. Not gated.
 
 ## 8. Acceptance (`@perf`)
 
@@ -315,6 +379,7 @@ benchmark's noise. This is I2 on real cases. No timed run with the flag.
 ## 9. Left out
 
 - Frozen holes on cut runs (refused, section 3.1).
+- Frozen holes of a `--catchments` union (refused, section 3.1).
 - Moving or snapping a crossing line onto a hole vertex. It is refused instead; a user who
   needs borders across a frozen hole puts their vertices on it.
 - A frozen outer ring. Only holes are frozen; the use joins along a hole.
@@ -327,13 +392,13 @@ Python only, no C++, no binding change. Estimate, in counted lines:
 | where | what | lines |
 |---|---|---|
 | `cli.py` `mesh` | the option and its help | 9 |
-| `cli.py` | the three refusals | 9 |
+| `cli.py` | the four refusals | 13 |
 | `cli.py` | the flag to `_dem_mesh`, `_Tuning.frozen`, the partial | 6 |
 | `cli.py` `_dem_mesh` | the bit on hole chains | 3 |
 | `cli.py` | the check after noding, its two messages, the snap figure | 16 |
-| `cli.py` `_refined` | the frozen mask from `_Tuning`; the chord sampling; the check after `trim`, its message, the bit removed | 26 |
+| `cli.py` `_refined` | the frozen mask, the exact chord error, the check after `trim` | 32 |
 | `run_record.py` | three entries | 5 |
-| **total** | | **about 73** |
+| **total** | | **about 83** |
 
 One pull request, far under 700.
 
