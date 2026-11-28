@@ -66,6 +66,8 @@ WORDING = {
     "crs": "Coordinate system",
     "tolerance_m": "Tolerance",
     "max_error_m": "Largest height error",
+    "frozen_holes": "Holes of --domain kept as given (--frozen-holes)",
+    "frozen_edges_max_error_m": "Largest height error along the kept hole edges, not refined",
     "tolerance_slope_m": "Tolerance on steep ground",
     "tolerance_slope_deg": (
         "Slope where the tolerance starts to tighten, and where it reaches the steep value"
@@ -161,6 +163,7 @@ WORDING = {
     ),
     "final_check_snapped_points_added_anyway": "Of them, also added where they were",
     "start_vertices_between_dem_nodes": "Starting-mesh vertices not on a DEM node",
+    "hole_vertices_snapped_max_m": "Farthest a hole vertex was moved by the snap to the grid",
 }
 _NAMES = list(WORDING)
 INPUTS = frozenset(_NAMES[: _NAMES.index("crs")])

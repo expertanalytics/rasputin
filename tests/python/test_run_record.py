@@ -856,3 +856,51 @@ class TestErrorSummaryFields:
         text = rr.summary(projected(rr, tolerance_m=1.0, max_error_m=0.9978908039820453))
         assert "root-mean-square" not in text, text
         assert "(largest difference 0.99789 m)." in text, text
+
+
+# ---------------------------------------------------------------- frozen holes
+
+
+class TestFrozenHoleFields:
+    """`docs/increments/198-frozen-holes.md`, *3.6 Recorded*: two entries in the
+    mesh file after ``max_error_m``, the snap figure a count row only, and the
+    summary as without them."""
+
+    WORDING: ClassVar[dict[str, str]] = {
+        "frozen_holes": "Holes of --domain kept as given (--frozen-holes)",
+        "frozen_edges_max_error_m": "Largest height error along the kept hole edges, not refined",
+        "hole_vertices_snapped_max_m": "Farthest a hole vertex was moved by the snap to the grid",
+    }
+
+    def frozen(self, rr: ModuleType) -> Any:
+        return projected(
+            rr,
+            frozen_holes=1,
+            frozen_edges_max_error_m=0.6000000238418579,
+            hole_vertices_snapped_max_m=0.0004,
+        )
+
+    def test_the_labels(self, rr: ModuleType) -> None:
+        for name, label in self.WORDING.items():
+            assert rr.WORDING.get(name) == label, name
+
+    def test_two_go_into_the_file_after_the_largest_error(self, rr: ModuleType) -> None:
+        got = list(fields(rr, self.frozen(rr)))
+        assert "hole_vertices_snapped_max_m" not in got
+        at = [got.index(n) for n in ("max_error_m", "frozen_holes", "frozen_edges_max_error_m")]
+        assert at == sorted(at), got
+        assert fields(rr, self.frozen(rr))["frozen_holes"] == "1"
+
+    def test_each_is_a_stats_row(self, rr: ModuleType) -> None:
+        got = rows(rr, self.frozen(rr))
+        assert got["frozen_holes"] == (self.WORDING["frozen_holes"], "1")
+        assert got["hole_vertices_snapped_max_m"] == (
+            self.WORDING["hole_vertices_snapped_max_m"],
+            "0.0004",
+        )
+        assert got["frozen_edges_max_error_m"][0] == self.WORDING["frozen_edges_max_error_m"]
+
+    def test_the_largest_error_and_the_summary_are_as_without_them(self, rr: ModuleType) -> None:
+        plain = projected(rr)
+        assert numbers(self.frozen(rr))["max_error_m"] == numbers(plain)["max_error_m"]
+        assert rr.summary(self.frozen(rr)) == rr.summary(plain)
