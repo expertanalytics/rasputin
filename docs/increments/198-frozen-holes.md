@@ -1,10 +1,6 @@
 # Increment 198: `--frozen-holes`, a domain's holes kept exactly as given
 
-Status: **designed** (`@architect`, 2026-11-28, on master `949bc7d66`; amended after design
-review: a hole vertex with no DEM under it is refused, section 3.4; amended after code review
-at `274a2efe`: `--catchments` refused, the error figure exact on the DEM, the merged-vertex
-refusal tested). Next: red (`@tester`), green (`@developer`), test run, `@perf`'s acceptance
-run, code review.
+Status: **implemented, in review.** Design `4c4f76c3c`, amended `eed7da7ec`, `8ef6bee5a`; red `6ea097ecc`, `4bbcb8d6d`; green `274a2efe0`, `5e36c9389`; acceptance, untimed, `2305e88c0`.
 
 Lane: **full**. The change is in `rasputin mesh`'s refinement driver (`cli.py`'s `_refined` and
 `_dem_mesh`), which `docs/increments/README.md` (*Acceptance*) counts as "what drives"
@@ -366,8 +362,7 @@ Off by default, so no run changes unless it asks. `bench_quick` has 4 cases with
 shapely). So the gated cost there is 0.
 
 With the flag, the new work is one membership pass over each hole chain after noding, and one
-sampling pass along the hole edges: two samples per piece, and at most sqrt(2) × ring length /
-cell pieces. That is, for example, at most 37,000 points for 130 km of ring at 10 m, one
+sampling pass along the hole edges: three samples per piece (ends and midpoint), and at most sqrt(2) × ring length / cell pieces plus one per edge. That is, for example, about 55,000 points for 130 km of ring at 10 m, one
 bilinear sample each, against seconds to minutes of refinement. Not gated.
 
 ## 8. Acceptance (`@perf`)
