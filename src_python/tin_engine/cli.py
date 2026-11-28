@@ -1111,6 +1111,12 @@ def mesh(
         prefer or [], classes, known, root,
         lambda value: _fetch_run(value, domain, box, out_crs, cache),
     )  # fmt: skip
+    if frozen_holes and catchments is not None:
+        raise typer.BadParameter(
+            "--frozen-holes keeps the holes of --domain; --catchments replaces the domain with "
+            "the union of its units",
+            param_hint="--catchments",
+        )
     units_source = _reservoir_source(
         catchments, categories is not None, known, root,
         _fetch_run(catchments or "", domain, box, out_crs, cache), "--catchments", no_cells,
@@ -3693,19 +3699,41 @@ def _holes_kept(
 
 
 def _frozen_error(tile: DemTile, out: RefineOutcome, bit: int) -> float | None:
-    """The largest |DEM - chord| along the edges carrying ``bit``, at points a
-    cell apart from end to end; None with no valid point."""
+    """The largest |DEM - chord| along the edges carrying ``bit``, exact for the
+    bilinear DEM: each edge is cut at the DEM's node columns and rows, and on
+    each piece, a quadratic in t, its ends, midpoint and vertex are sampled;
+    None with no valid point."""
     ends = np.asarray(out.edges, dtype=np.int64)[(np.asarray(out.masks) & np.uint32(bit)) != 0]
     xy, z, valid = np.asarray(out.vertices)[:, :2], np.asarray(out.z), np.asarray(out.valid)
-    a, b = xy[ends[:, 0]], xy[ends[:, 1]]
-    cell = min(tile.meta.delta_x, abs(tile.meta.delta_y))
-    n = np.maximum(1, np.ceil(np.hypot(*(b - a).T) / cell)).astype(np.int64) + 1  # points
-    e = np.repeat(np.arange(len(ends)), n)
-    t = (np.arange(int(n.sum())) - np.repeat(np.cumsum(n) - n, n)) / (n[e] - 1)
-    dem, ok = sample(to_core(tile), a[e] + t[:, None] * (b - a)[e])
-    za, zb = z[ends[e, 0]], z[ends[e, 1]]
-    error = np.abs(dem - (za + t * (zb - za)))[ok & valid[ends[e]].all(axis=1)]
-    return float(error.max()) if error.size else None
+    m = tile.meta
+    cuts = []
+    for p, q in zip(xy[ends[:, 0]], xy[ends[:, 1]], strict=True):
+        t = [np.array([0.0, 1.0])]
+        for k, origin, step in ((0, m.x_min, m.delta_x), (1, m.y_max, -abs(m.delta_y))):
+            if p[k] != q[k]:
+                lo, hi = sorted(((p[k] - origin) / step, (q[k] - origin) / step))
+                nodes = origin + np.arange(math.ceil(lo), math.floor(hi) + 1) * step
+                t.append(np.clip((nodes - p[k]) / (q[k] - p[k]), 0.0, 1.0))
+        cuts.append(np.unique(np.concatenate(t)))
+    e = np.repeat(np.arange(len(ends)), [len(c) - 1 for c in cuts])
+    t0 = np.concatenate([c[:-1] for c in cuts]) if cuts else np.zeros(0)
+    t1 = np.concatenate([c[1:] for c in cuts]) if cuts else np.zeros(0)
+    a, b = xy[ends[e, 0]], xy[ends[e, 1]]
+    za, zb, ends_ok = z[ends[e, 0]], z[ends[e, 1]], valid[ends[e]].all(axis=1)
+
+    def error(t: npt.NDArray[np.float64]) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
+        dem, ok = sample(to_core(tile), a + t[:, None] * (b - a))
+        return np.asarray(dem) - (za + t * (zb - za)), np.asarray(ok) & ends_ok
+
+    (e0, ok0), (em, okm), (e1, ok1) = error(t0), error((t0 + t1) / 2), error(t1)
+    curve, slope = 2 * (e0 - 2 * em + e1), 4 * em - 3 * e0 - e1  # e(s) = e0 + slope s + curve s²
+    flat = curve == 0
+    s = np.where(flat, -1.0, -slope / np.where(flat, 1.0, 2 * curve))
+    inside = ok0 & okm & ok1 & (s > 0) & (s < 1)
+    found = [np.abs(v[ok]) for v, ok in ((e0, ok0), (em, okm), (e1, ok1))]
+    found.append(np.abs(e0 + slope * s + curve * s * s)[inside])
+    every = np.concatenate(found)
+    return float(every.max()) if every.size else None
 
 
 def _budget_refined(
